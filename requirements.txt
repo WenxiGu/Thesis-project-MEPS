@@ -1,0 +1,35 @@
+##########
+# Core numeric & data
+##########
+numpy
+pandas
+scipy
+
+##########
+# Modeling / ML
+##########
+scikit-learn
+xgboost
+lightgbm
+imbalanced-learn
+statsmodels
+shap
+
+##########
+# Visualization
+##########
+matplotlib
+seaborn
+
+##########
+# I/O and formats
+##########
+openpyxl   # pandas 读 Excel (h252.xlsx) 用到
+pyarrow    # 存取 parquet 文件（data_io.py 中用到）
+
+##########
+# Notebooks / dev
+##########
+jupyterlab
+ipykernel
+tqdm
