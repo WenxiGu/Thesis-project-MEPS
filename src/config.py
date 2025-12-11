@@ -17,13 +17,27 @@ TABLES_DIR = RESULTS_DIR / "tables"
 # 随机种子
 RANDOM_SEED = 42
 
-# 目标变量名称（先写你大概率会用的，之后可以再改）
-REG_TARGET_TOTEXPY2 = "TOTEXPY2"   # 回归：第2年总费用
-REG_BASELINE_TOTEXPY1 = "TOTEXPY1" # 基线费用（常用特征）
+# ----- Target variable names -----
 
-# 例子：分类任务的标签
-CLASS_TARGET_ER_Y2 = "ER_Y2"       # 你之后可以从 ER 总次数构造 0/1 变量
-CLASS_TARGET_IP_Y2 = "IPDISY2"     # 是否住院（0/1 或次数）
+# 原始总费用（回归目标的原始版本）
+REG_TARGET_TOTEXPY2_RAW = "TOTEXPY2"
+REG_BASELINE_TOTEXPY1   = "TOTEXPY1"   # Year 1 baseline cost（重要特征）
+
+# 建模时真正用的回归目标：log(1 + TOTEXPY2)
+REG_TARGET_TOTEXPY2_LOG = "LOG_TOTEXPY2"
+
+# 高费用标签（例如基于 TOTEXPY2 的 top 10% 定义）
+CLASS_TARGET_HIGHCOST_Y2 = "HIGHCOST_Y2"
+
+# 急诊 / 住院标签（Phase II 会从次数变量构造）
+CLASS_TARGET_ANY_ED_Y2 = "ANY_ED_Y2"   # 1 if any ED visit in Y2
+CLASS_TARGET_ANY_IP_Y2 = "ANY_IP_Y2"   # 1 if any inpatient stay in Y2
+
+# 你也可以保留原始次数变量名字作为参考
+ED_COUNT_Y1 = "ERTOTY1"
+ED_COUNT_Y2 = "ERTOTY2"
+IP_COUNT_Y1 = "IPDISY1"
+IP_COUNT_Y2 = "IPDISY2"
 
 # 权重变量（MEPS 纵向权重）
 WEIGHT_COL = "LONGWT"

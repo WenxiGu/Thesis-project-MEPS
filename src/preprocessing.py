@@ -312,13 +312,14 @@ def preprocess_meps(df_raw: pd.DataFrame) -> pd.DataFrame:
     2. Optionally restrict to complete panel (ALL5RDS == 1 & YEARIND == 1).
     3. Replace MEPS special missing codes with NaN.
     4. Clean negative expenditure values.
+    5. Drop coverage flags that are almost entirely missing (PREVCOVR, MORECOVR).
 
     More aggressive steps (winsorization, dropping extreme outliers)
     are handled later in feature engineering / modeling.
     """
-    df = select_core_columns(df_raw)
+    df = select_core_columns(df_raw).copy()
 
-    # 可选：只保留完整随访样本
+    
     if "ALL5RDS" in df.columns:
         df = df[df["ALL5RDS"] == 1]
     if "YEARIND" in df.columns:
@@ -329,6 +330,13 @@ def preprocess_meps(df_raw: pd.DataFrame) -> pd.DataFrame:
 
     # 金额负值 → NaN
     df = clean_negative_expenditures(df)
+       
+     # 丢掉几乎全缺的 coverage flags（以后不当特征用）
+    for col in ["PREVCOVR", "MORECOVR"]:
+        if col in df.columns:
+            # 也可以直接 drop，不检查；这里多一行只是更安全
+            if df[col].isna().mean() > 0.8:
+                df = df.drop(columns=col)
 
     return df
 
@@ -337,79 +345,3 @@ def preprocess_meps(df_raw: pd.DataFrame) -> pd.DataFrame:
 
 
 
-
-
-
-
-
-
-
-
-# def filter_complete_panel(df: pd.DataFrame) -> pd.DataFrame:
-#     """
-#     Keep individuals with complete panel (e.g. ALL5RDS==1), if column exists.
-
-#     If the ALL5RDS column is not present, the dataframe is returned unchanged.
-
-#     Returns
-#     -------
-#     df_filtered : pandas.DataFrame
-#     """
-#     df_filtered = df.copy()
-#     if "ALL5RDS" in df_filtered.columns:
-#         df_filtered = df_filtered[df_filtered["ALL5RDS"] == 1]
-#     return df_filtered
-
-
-# def select_core_columns(
-#     df: pd.DataFrame,
-#     extra_cols: Optional[List[str]] = None
-# ) -> pd.DataFrame:
-#     """
-#     Select a core set of columns for modeling.
-
-#     This is a placeholder where you will later specify:
-#     - ID column (e.g. DUID, PID, DUPERSID...)
-#     - demographic vars
-#     - socio-economic vars
-#     - baseline health / utilization vars
-#     - targets (TOTEXPY1, TOTEXPY2, ER, IP, etc.)
-#     - weights and survey design variables
-
-#     For now, this function just returns df unchanged.
-
-#     Parameters
-#     ----------
-#     df : pandas.DataFrame
-#     extra_cols : list of str, optional
-#         Extra columns you want to keep.
-
-#     Returns
-#     -------
-#     df_sel : pandas.DataFrame
-#     """
-#     # TODO: 根据文档，真正列出你要保留的核心变量列表
-#     # 如：
-#     # core_cols = [
-#     #     "DUPERSID", "AGE23X", "SEX", "REGION23", "RACETHX",
-#     #     "TOTEXPY1", "TOTEXPY2",
-#     #     "ERVISITY1", "ER_VISITY2", "IPDISY1", "IPDISY2",
-#     #     WEIGHT_COL, "VARSTR", "VARPSU",
-#     # ]
-#     # if extra_cols is not None:
-#     #     core_cols.extend(extra_cols)
-#     # core_cols = [c for c in core_cols if c in df.columns]
-#     #
-#     # return df[core_cols].copy()
-
-#     if extra_cols is not None:
-#         # 临时行为：如果传 extra_cols，就只保留这些存在的
-#         cols = [c for c in extra_cols if c in df.columns]
-#         return df[cols].copy()
-
-#     return df.copy()
-
-
-# def preprocess_meps(df_raw: pd.DataFrame) -> pd.DataFrame:
-#     df = select_core_columns(df)
-#     return df
