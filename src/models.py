@@ -1,117 +1,254 @@
 # src/models.py
-from typing import Dict, Tuple
+
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional, Dict, Any, Tuple
 
 import numpy as np
 import pandas as pd
-from sklearn.base import RegressorMixin, ClassifierMixin
-from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.impute import SimpleImputer
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import ElasticNet, LogisticRegression
 from sklearn.metrics import (
     mean_absolute_error,
-    mean_squared_error,
+    root_mean_squared_error,
     r2_score,
     roc_auc_score,
+    average_precision_score,
     f1_score,
 )
 
-from .config import RANDOM_SEED
+import joblib
 
 
-# ========= 回归 =========
 
-def get_default_regression_models() -> Dict[str, RegressorMixin]:
+# ---------------------------
+# Utilities
+# ---------------------------
+
+def split_train_val_test(
+    X: pd.DataFrame,
+    y: pd.Series,
+    *,
+    test_size: float = 0.2,
+    val_size: float = 0.2,
+    random_state: int = 42,
+    stratify: bool = False
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series]:
     """
-    Return a dict of simple baseline regression models.
+    Split into train/val/test.
+    test_size and val_size are fractions of the full dataset.
+    If stratify=True, preserves class balance across splits.
     """
-    models: Dict[str, RegressorMixin] = {
-        "linear_regression": LinearRegression(),
-        "random_forest_reg": RandomForestRegressor(
-            n_estimators=200,
-            random_state=RANDOM_SEED,
-            n_jobs=-1,
-        ),
+    X = X.copy()
+    y = y.copy()
+
+    strat1 = y if stratify else None
+    X_trainval, X_test, y_trainval, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=random_state, stratify=strat1
+    )
+
+    val_frac_of_trainval = val_size / (1 - test_size)  # e.g., 0.2/0.8 = 0.25
+    strat2 = y_trainval if stratify else None
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_trainval, y_trainval, test_size=val_frac_of_trainval, random_state=random_state, stratify=strat2
+    )
+
+    return X_train, X_val, X_test, y_train, y_val, y_test
+
+
+def make_preprocess(
+    num_cols: list[str],
+    cat_cols: list[str],
+    *,
+    scale_numeric: bool = True
+) -> ColumnTransformer:
+    """
+    Build preprocessing transformer:
+    - numeric: median impute (+ optional scaling)
+    - categorical: most_frequent impute + one-hot (ignore unseen categories)
+    """
+    num_steps = [("imputer", SimpleImputer(strategy="median"))]
+    if scale_numeric:
+        num_steps.append(("scaler", StandardScaler()))
+
+    preprocess = ColumnTransformer(
+        transformers=[
+            ("num", Pipeline(steps=num_steps), num_cols),
+            ("cat", Pipeline(steps=[
+                ("imputer", SimpleImputer(strategy="most_frequent")),
+                ("onehot", OneHotEncoder(handle_unknown="ignore")),
+            ]), cat_cols),
+        ],
+        remainder="drop",
+    )
+    return preprocess
+
+
+def best_threshold_by_f1(y_true: np.ndarray, proba: np.ndarray, grid: Optional[np.ndarray] = None) -> Tuple[float, float]:
+    """
+    Find threshold that maximizes F1 on validation set.
+    """
+    if grid is None:
+        grid = np.linspace(0.05, 0.95, 19)
+
+    best_t, best_f1 = 0.5, -1.0
+    for t in grid:
+        pred = (proba >= t).astype(int)
+        f1 = f1_score(y_true, pred)
+        if f1 > best_f1:
+            best_f1, best_t = f1, t
+    return best_t, best_f1
+
+
+def save_pipeline(model: Pipeline, path: str | Path) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, path)
+
+
+# ---------------------------
+# Results containers
+# ---------------------------
+
+@dataclass
+class RegressionResult:
+    model: Pipeline
+    valid_metrics: Dict[str, float]
+    test_metrics: Dict[str, float]
+
+
+@dataclass
+class ClassificationResult:
+    model: Pipeline
+    best_threshold: float
+    valid_metrics: Dict[str, float]
+    test_metrics: Dict[str, float]
+
+
+# ---------------------------
+# Baseline models
+# ---------------------------
+
+def run_regression_baseline(
+    df: pd.DataFrame,
+    *,
+    target_col: str,
+    num_cols: list[str],
+    cat_cols: list[str],
+    random_state: int = 42,
+    alpha: float = 0.01,
+    l1_ratio: float = 0.5,
+    max_iter: int = 20000,
+    scale_numeric: bool = True,
+    
+) -> RegressionResult:
+    """
+    Baseline regression on target_col using ElasticNet.
+    Uses train/val/test split. Reports metrics on val and test.
+    """
+    X = df[num_cols + cat_cols].copy()
+    y = df[target_col].copy()
+    mask = y.notna()
+    X = X.loc[mask]
+    y = y.loc[mask]
+
+    preprocess = make_preprocess(num_cols, cat_cols, scale_numeric=scale_numeric)
+    model = Pipeline(steps=[
+        ("preprocess", preprocess),
+        ("model", ElasticNet(alpha=alpha, l1_ratio=l1_ratio, max_iter=max_iter, random_state=random_state)),
+    ])
+
+    X_train, X_val, X_test, y_train, y_val, y_test = split_train_val_test(
+        X, y, random_state=random_state, stratify=False
+    )
+
+
+    model.fit(X_train, y_train)
+
+    # validate
+    val_pred = model.predict(X_val)
+    valid_metrics = {
+        "MAE_log": mean_absolute_error(y_val, val_pred),
+        "RMSE_log": root_mean_squared_error(y_val, val_pred),
+        "R2": r2_score(y_val, val_pred),
     }
-    return models
 
-
-def evaluate_regression_model(
-    model: RegressorMixin,
-    X_train: pd.DataFrame,
-    y_train: pd.Series,
-    X_test: pd.DataFrame,
-    y_test: pd.Series,
-    sample_weight_train: pd.Series | None = None,
-    sample_weight_test: pd.Series | None = None,
-) -> Dict[str, float]:
-    """
-    Fit a regression model and compute basic metrics.
-    """
-    fit_kwargs = {}
-    if sample_weight_train is not None:
-        fit_kwargs["sample_weight"] = sample_weight_train
-
-    model.fit(X_train, y_train, **fit_kwargs)
-
-    y_pred = model.predict(X_test)
-
-    mae = mean_absolute_error(y_test, y_pred, sample_weight=sample_weight_test)
-    rmse = mean_squared_error(y_test, y_pred, sample_weight=sample_weight_test, squared=False)
-    r2 = r2_score(y_test, y_pred, sample_weight=sample_weight_test)
-
-    return {
-        "MAE": mae,
-        "RMSE": rmse,
-        "R2": r2,
+    # test
+    test_pred = model.predict(X_test)
+    test_metrics = {
+        "MAE_log": mean_absolute_error(y_test, test_pred),
+        "RMSE_log": root_mean_squared_error(y_test, test_pred),
+        "R2": r2_score(y_test, test_pred),
     }
 
+    return RegressionResult(model=model, valid_metrics=valid_metrics, test_metrics=test_metrics)
 
-# ========= 二分类 =========
 
-def get_default_classification_models() -> Dict[str, ClassifierMixin]:
+def run_classification_baseline(
+    df: pd.DataFrame,
+    *,
+    target_col: str,
+    num_cols: list[str],
+    cat_cols: list[str],
+    random_state: int = 42,
+    max_iter: int = 2000,
+    class_weight: str | Dict[int, float] | None = "balanced",
+    scale_numeric: bool = True,
+    
+) -> ClassificationResult:
     """
-    Return a dict of simple baseline classification models.
+    Baseline classification using LogisticRegression.
+    Uses train/val/test split with stratification.
+    Chooses best threshold on validation set by F1.
+    Reports AUC, PR-AUC and F1@best_t on test.
     """
-    models: Dict[str, ClassifierMixin] = {
-        "logistic_reg": LogisticRegression(
-            max_iter=1000,
-            class_weight="balanced",
-            n_jobs=-1,
-        ),
-        "random_forest_clf": RandomForestClassifier(
-            n_estimators=300,
-            random_state=RANDOM_SEED,
-            class_weight="balanced",
-            n_jobs=-1,
-        ),
+    X = df[num_cols + cat_cols].copy()
+    y = df[target_col].copy().astype(int)  # assumes 0/1
+    mask = y.notna()
+    X = X.loc[mask]
+    y = y.loc[mask]
+
+    preprocess = make_preprocess(num_cols, cat_cols, scale_numeric=scale_numeric)
+    model = Pipeline(steps=[
+        ("preprocess", preprocess),
+        ("model", LogisticRegression(max_iter=max_iter, class_weight=class_weight)),
+    ])
+
+    X_train, X_val, X_test, y_train, y_val, y_test = split_train_val_test(
+        X, y, random_state=random_state, stratify=True
+    )
+
+   
+
+    model.fit(X_train, y_train)
+
+    # validation -> choose threshold
+    val_proba = model.predict_proba(X_val)[:, 1]
+    best_t, best_f1 = best_threshold_by_f1(y_val.values, val_proba)
+
+    valid_metrics = {
+        "AUC": roc_auc_score(y_val, val_proba),
+        "PR_AUC": average_precision_score(y_val, val_proba),
+        "best_t": best_t,
+        "best_F1": best_f1,
     }
-    return models
 
+    # test (use threshold chosen on validation)
+    test_proba = model.predict_proba(X_test)[:, 1]
+    test_pred = (test_proba >= best_t).astype(int)
 
-def evaluate_classification_model(
-    model: ClassifierMixin,
-    X_train: pd.DataFrame,
-    y_train: pd.Series,
-    X_test: pd.DataFrame,
-    y_test: pd.Series,
-    sample_weight_train: pd.Series | None = None,
-    sample_weight_test: pd.Series | None = None,
-) -> Dict[str, float]:
-    """
-    Fit a classification model and compute basic metrics (AUC, F1).
-    """
-    fit_kwargs = {}
-    if sample_weight_train is not None:
-        fit_kwargs["sample_weight"] = sample_weight_train
-
-    model.fit(X_train, y_train, **fit_kwargs)
-
-    y_proba = model.predict_proba(X_test)[:, 1]
-    y_pred = (y_proba >= 0.5).astype(int)
-
-    auc = roc_auc_score(y_test, y_proba, sample_weight=sample_weight_test)
-    f1 = f1_score(y_test, y_pred, sample_weight=sample_weight_test)
-
-    return {
-        "AUC": auc,
-        "F1_0.5": f1,
+    test_metrics = {
+        "AUC": roc_auc_score(y_test, test_proba),
+        "PR_AUC": average_precision_score(y_test, test_proba),
+        "F1_at_best_t": f1_score(y_test, test_pred),
     }
+
+    return ClassificationResult(model=model, best_threshold=best_t, valid_metrics=valid_metrics, test_metrics=test_metrics
+
+) 
