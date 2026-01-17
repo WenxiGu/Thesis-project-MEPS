@@ -1,0 +1,13 @@
+{
+  "target": "HIGHCOST_Y2",
+  "model": "RandomForest",
+  "best_threshold": 0.5499999999999999,
+  "test_metrics": {
+    "AUC": 0.8676443788384087,
+    "PR_AUC": 0.45889778426594363,
+    "F1_at_best_t": 0.5360230547550432
+  },
+  "saved_at": "2025-12-26T19:43:45.196702",
+  "sklearn_version": "1.7.2",
+  "xgboost_version": "3.1.2"
+}
