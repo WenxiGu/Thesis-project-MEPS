@@ -93,8 +93,10 @@ st.title("Health Outcome Predictor (MVP)")
 ROOT = get_project_root()
 ART_DIR = get_artifact_dir(ROOT)
 
-st.caption(f"Project root: {ROOT}")
-st.caption(f"Artifacts: {ART_DIR}")
+
+with st.sidebar.expander("Debug info"):
+    st.write(f"Project root: {ROOT}")
+    st.write(f"Artifacts: {ART_DIR}")
 
 # Sidebar
 st.sidebar.header("Data input")
@@ -179,27 +181,42 @@ else:
         st.exception(e)
         st.stop()
 
+    
+
     out = df.copy()
     out["pred_log_cost"] = pred
-    out, k = topk_select(out, "pred_log_cost", top_frac)
+    out["pred_cost_usd"] = np.expm1(out["pred_log_cost"]).clip(lower=0)
 
-    c1, c2, c3 = st.columns(3)
+    # rank by USD cost (equivalent monotonic transform, but clearer)
+    out, k = topk_select(out, "pred_cost_usd", top_frac)
+
+    mean_usd = out["pred_cost_usd"].mean()
+    med_usd = out["pred_cost_usd"].median()
+    p90_usd = float(out["pred_cost_usd"].quantile(0.90))
+
+    c1, c2, c3, c4 = st.columns(4)
     c1.metric("Rows scored", f"{len(out):,}")
     c2.metric(f"Top {int(top_frac*100)}% selected", f"{k:,}")
-    c3.metric("Mean predicted log cost", f"{out['pred_log_cost'].mean():.3f}")
+    c3.metric("Mean predicted cost (USD)", f"{mean_usd:,.0f}")
+    c4.metric("Median predicted cost (USD)", f"{med_usd:,.0f}")
+
+    st.caption(f"Top {int(top_frac*100)}% threshold ≈ ${p90_usd:,.0f} predicted Year-2 total expenditure.")
 
     st.subheader("Ranked list (highest predicted cost first)")
-    cols_to_show = ["pred_log_cost", "selected_topk"] + show_cols
+    base_cols = ["pred_cost_usd", "selected_topk"]
+    # keep log cost optional (nice for debugging)
+    optional_cols = ["pred_log_cost"]
+    cols_to_show = base_cols + optional_cols + show_cols
     cols_to_show = [c for c in cols_to_show if c in out.columns]
+
     st.dataframe(
-        out.sort_values("pred_log_cost", ascending=False)[cols_to_show].head(max_rows),
+        out.sort_values("pred_cost_usd", ascending=False)[cols_to_show].head(max_rows),
         use_container_width=True,
     )
 
     st.download_button(
         "Download scored CSV",
-        data=out.to_csv(index=False).encode("utf-8"),
-        file_name="scored_reg_log_totexpy2.csv",
+        data=out.sort_values("pred_cost_usd", ascending=False).to_csv(index=False).encode("utf-8"),
+        file_name="scored_reg_totexpy2_usd.csv",
         mime="text/csv",
     )
-
