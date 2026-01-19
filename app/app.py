@@ -5,6 +5,10 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+import sys, time
+print("BOOT:", time.ctime(), flush=True)
+sys.stdout.flush()
+
 from model_loader import (
     FEATURES,
     get_project_root,
