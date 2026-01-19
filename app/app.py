@@ -80,7 +80,8 @@ def add_reason_tags(df: pd.DataFrame) -> pd.DataFrame:
             t.append("Hypertension")
 
         tags.append(", ".join(t[:3]))
-    df["reasons"] = tags
+    df["reason_tags"] = tags
+
     return df
 
 
@@ -168,7 +169,7 @@ if mode.startswith("Classification"):
     c3.metric("Mean risk score", f"{out['score'].mean():.3f}")
 
     st.subheader("Ranked list")
-    cols_to_show = ["score", "selected_topk", "reasons"] + show_cols
+    cols_to_show = ["score", "selected_topk", "reason_tags"] + show_cols
     cols_to_show = [c for c in cols_to_show if c in out.columns]
     st.dataframe(out[cols_to_show].head(max_rows), use_container_width=True)
 
@@ -196,8 +197,11 @@ else:
     out = df.copy()
     out["pred_log_cost"] = pred
     out["pred_cost_usd"] = np.expm1(out["pred_log_cost"]).clip(lower=0)
-    out["pred_cost_usd"] = out["pred_cost_usd"].round(0).astype(int)
+    
     out["pred_log_cost"] = out["pred_log_cost"].round(4)
+    out["pred_cost_usd"] = out["pred_cost_usd"].round(0).astype(int)
+    out["pred_cost_usd_fmt"] = out["pred_cost_usd"].map(lambda x: f"${x:,}")
+
 
 
     # rank by USD cost (equivalent monotonic transform, but clearer)
@@ -226,7 +230,7 @@ else:
     st.caption(f"Top {int(top_frac*100)}% threshold ≈ ${p90_usd:,.0f} predicted Year-2 total expenditure.")
 
     st.subheader("Ranked list (highest predicted cost first)")
-    base_cols = ["pred_cost_usd", "selected_topk"]
+    base_cols = ["pred_cost_usd_fmt", "selected_topk"]
     # keep log cost optional (nice for debugging)
     optional_cols = ["pred_log_cost"]
     cols_to_show = base_cols + optional_cols + show_cols
@@ -249,9 +253,13 @@ else:
 )
 
 
+    
+     
     st.download_button(
-        "Download scored CSV",
-        data=out.sort_values("pred_cost_usd", ascending=False).to_csv(index=False).encode("utf-8"),
-        file_name="scored_reg_totexpy2_usd.csv",
-        mime="text/csv",
-    )
+    "Download scored CSV",
+    data=out.sort_values("pred_cost_usd", ascending=False)
+          .drop(columns=["pred_cost_usd_fmt"], errors="ignore")
+          .to_csv(index=False).encode("utf-8"),
+    file_name="scored_reg_totexpy2_usd.csv",
+    mime="text/csv",
+)
