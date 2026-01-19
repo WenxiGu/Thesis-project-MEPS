@@ -152,6 +152,16 @@ if mode.startswith("Classification"):
     out, k = topk_select(out, "score", top_frac)
     out = add_reason_tags(out)
 
+    overall_mean = float(out["score"].mean())
+    selected_mean = float(out.loc[out["selected_topk"] == 1, "score"].mean())
+    lift = (selected_mean / overall_mean) if overall_mean > 0 else float("nan")
+
+    l1, l2, l3 = st.columns(3)
+    l1.metric("Overall mean risk", f"{overall_mean:.3f}")
+    l2.metric("Selected mean risk", f"{selected_mean:.3f}")
+    l3.metric("Lift (selected / overall)", f"{lift:.2f}×")
+
+
     c1, c2, c3 = st.columns(3)
     c1.metric("Rows scored", f"{len(out):,}")
     c2.metric(f"Top {int(top_frac*100)}% selected", f"{k:,}")
@@ -186,9 +196,22 @@ else:
     out = df.copy()
     out["pred_log_cost"] = pred
     out["pred_cost_usd"] = np.expm1(out["pred_log_cost"]).clip(lower=0)
+    out["pred_cost_usd"] = out["pred_cost_usd"].round(0).astype(int)
+    out["pred_log_cost"] = out["pred_log_cost"].round(4)
+
 
     # rank by USD cost (equivalent monotonic transform, but clearer)
     out, k = topk_select(out, "pred_cost_usd", top_frac)
+
+    overall_mean_cost = float(out["pred_cost_usd"].mean())
+    selected_mean_cost = float(out.loc[out["selected_topk"] == 1, "pred_cost_usd"].mean())
+    cost_lift = (selected_mean_cost / overall_mean_cost) if overall_mean_cost > 0 else float("nan")
+
+    r1, r2, r3 = st.columns(3)
+    r1.metric("Overall mean cost (USD)", f"{overall_mean_cost:,.0f}")
+    r2.metric("Selected mean cost (USD)", f"{selected_mean_cost:,.0f}")
+    r3.metric("Lift (selected / overall)", f"{cost_lift:.2f}×")
+
 
     mean_usd = out["pred_cost_usd"].mean()
     med_usd = out["pred_cost_usd"].median()
@@ -209,10 +232,22 @@ else:
     cols_to_show = base_cols + optional_cols + show_cols
     cols_to_show = [c for c in cols_to_show if c in out.columns]
 
+    
     st.dataframe(
-        out.sort_values("pred_cost_usd", ascending=False)[cols_to_show].head(max_rows),
-        use_container_width=True,
-    )
+    out.sort_values("pred_cost_usd", ascending=False)[cols_to_show].head(max_rows),
+    use_container_width=True,
+    column_config={
+        "pred_cost_usd": st.column_config.NumberColumn(
+            "pred_cost_usd (USD)",
+            format="$%,d",
+        ),
+        "pred_log_cost": st.column_config.NumberColumn(
+            "pred_log_cost",
+            format="%.4f",
+        ),
+    },
+)
+
 
     st.download_button(
         "Download scored CSV",
