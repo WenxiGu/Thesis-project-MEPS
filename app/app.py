@@ -9,7 +9,7 @@ import sys, time
 print("BOOT:", time.ctime(), flush=True)
 sys.stdout.flush()
 
-from app.model_loader import (
+from model_loader import (
     get_project_root,
     get_artifact_dir,
     load_classification_artifact,
