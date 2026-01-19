@@ -166,7 +166,9 @@ if mode.startswith("Classification"):
     c1, c2, c3 = st.columns(3)
     c1.metric("Rows scored", f"{len(out):,}")
     c2.metric(f"Top {int(top_frac*100)}% selected", f"{k:,}")
-    c3.metric("Mean risk score", f"{out['score'].mean():.3f}")
+    thr = float(out.loc[out["selected_topk"]==1, "score"].min())
+    c3.metric("Top-k score threshold", f"{thr:.3f}")
+
 
     st.subheader("Ranked list")
     cols_to_show = ["score", "selected_topk", "reason_tags"] + show_cols
@@ -224,7 +226,8 @@ else:
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Rows scored", f"{len(out):,}")
     c2.metric(f"Top {int(top_frac*100)}% selected", f"{k:,}")
-    c3.metric("Mean predicted cost (USD)", f"{mean_usd:,.0f}")
+    thr = float(out.loc[out["selected_topk"]==1, "pred_cost_usd"].min())
+    c3.metric("Top-k cost threshold (USD)", f"{thr:,.0f}")
     c4.metric("Median predicted cost (USD)", f"{med_usd:,.0f}")
 
     st.caption(f"Top {int(top_frac*100)}% threshold ≈ ${p90_usd:,.0f} predicted Year-2 total expenditure.")
