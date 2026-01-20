@@ -90,6 +90,11 @@ def add_reason_tags(df: pd.DataFrame) -> pd.DataFrame:
 # -----------------------
 st.set_page_config(page_title="Health Outcome Predictor (MVP)", layout="wide")
 st.title("Health Outcome Predictor (MVP)")
+st.caption(
+    "Demo uses a feature-engineered dataset (df_feat.parquet). "
+    "Uploaded data should follow the same feature schema used for model training."
+)
+
 
 ROOT = get_project_root()
 ART_DIR = get_artifact_dir(ROOT)
