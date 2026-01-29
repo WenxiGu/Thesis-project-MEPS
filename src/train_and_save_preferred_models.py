@@ -38,7 +38,7 @@ def find_project_root(start: Path) -> Path:
 
 PROJECT_ROOT = find_project_root(Path.cwd())
 DATA_PATH = PROJECT_ROOT / "data" / "df_feat.parquet"
-ART_DIR = PROJECT_ROOT / "results" / "model_artifacts_2"
+ART_DIR = PROJECT_ROOT / "results" / "model_artifacts_sklearn 1.8.0"
 ART_DIR.mkdir(parents=True, exist_ok=True)
 
 

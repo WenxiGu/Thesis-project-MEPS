@@ -18,6 +18,8 @@ A Streamlit MVP that scores individuals using pre-trained models and supports ca
 ## Quick start (local)
 From the repository root:
 
-```bash
+```
 pip install -r requirements.txt
 streamlit run app/app.py
+
+```
