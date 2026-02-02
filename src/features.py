@@ -1,5 +1,26 @@
 
+"""
+Feature engineering utilities for the MEPS Panel 27 project.
 
+This module transforms the cleaned MEPS core dataset into analysis and model-ready
+features and targets. Feature construction is organized by variable groups to keep
+the pipeline transparent and reproducible.
+
+Covered groups
+--------------
+- Demographics: age, age groups, sex, race/ethnicity, region, education
+- Socioeconomic status (SES): family income (log), poverty category, family size
+- Insurance: year-1 coverage indicators and detailed insurance type labels
+- Employment: year-1 worked indicator, unemployment compensation features, and a
+  round-level employment attachment summary using EMPST1/EMPST2
+- Health status: fair/poor indicators from self-rated health measures
+- Chronic conditions: binary indicators and a multi-morbidity count/index
+- Utilization & cost: baseline utilization/cost features and Year-2 prediction targets
+
+Typical usage
+-------------
+Run preprocess_meps() first (see preprocessing.py), then call add_features(df).
+"""
 
 import numpy as np
 import pandas as pd
@@ -18,17 +39,24 @@ from src.config import (
 )
 
 # ============================================================
-# CORE_DEMO_VARS  -> demographic feature engineering
+# CORE_DEMO_VARS -> demographic feature engineering
 # ============================================================
+
 
 def add_core_demo_features(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Demographics: AGE/AGE_GROUP, SEX, race/ethnicity, region, education.
+    Create demographic features: age/age group, sex, race/ethnicity, region, education.
+
+    Returns a copy of df with added columns (when corresponding raw columns exist).
     """
     df = df.copy()
 
     # --- Age ---
-    age_col = "AGEY1X" if "AGEY1X" in df.columns else ("AGEY2X" if "AGEY2X" in df.columns else None)
+    age_col = (
+        "AGEY1X"
+        if "AGEY1X" in df.columns
+        else ("AGEY2X" if "AGEY2X" in df.columns else None)
+    )
     if age_col is not None:
         df["AGE"] = df[age_col]
         df["AGE_GROUP"] = pd.cut(
@@ -42,7 +70,7 @@ def add_core_demo_features(df: pd.DataFrame) -> pd.DataFrame:
     if "SEX" in df.columns:
         df["SEX_BIN"] = (df["SEX"] == 2).astype(int)
 
-    # --- Race/ethnicity (categorical labels for one-hot later) ---
+    # --- Race/ethnicity (labels for one-hot later) ---
     if "RACETHX" in df.columns:
         race_map = {
             1: "Hispanic",
@@ -88,20 +116,21 @@ def add_core_demo_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ============================================================
-# CORE_SES_VARS  -> socio-economic feature engineering
+# CORE_SES_VARS -> socio-economic feature engineering
 # ============================================================
+
 
 def add_core_ses_features(df: pd.DataFrame) -> pd.DataFrame:
     """
-    SES: family income (log), poverty category, family size.
+    Create SES features: log family income, poverty category labels, family size groups.
     """
     df = df.copy()
 
-    # log family income (clamp negative at 0)
+    # Log family income (clamp negative at 0)
     if "FAMINCY1" in df.columns:
         df["LOG_FAMINCY1"] = np.log1p(df["FAMINCY1"].clip(lower=0))
 
-    # poverty category labels (keep numeric POVCATY1 too)
+    # Poverty category labels
     if "POVCATY1" in df.columns:
         pov_map = {
             1: "Poor / negative",
@@ -112,7 +141,7 @@ def add_core_ses_features(df: pd.DataFrame) -> pd.DataFrame:
         }
         df["POVCATY1_CAT"] = df["POVCATY1"].map(pov_map)
 
-    # family size
+    # Family size
     if "FAMSZEY1" in df.columns:
         df["FAMSIZE_Y1"] = df["FAMSZEY1"]
 
@@ -128,12 +157,16 @@ def add_core_ses_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ============================================================
-# CORE_INS_VARS  -> insurance feature engineering
+# CORE_INS_VARS -> insurance feature engineering
 # ============================================================
+
 
 def add_core_ins_features(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Insurance: year-1 coverage flags + detailed type.
+    Create insurance features from year-1 coverage flags and detailed coverage type.
+
+    - INSCOVY1 -> binary indicators: ANY_PRIVATE_Y1, PUBLIC_ONLY_Y1, UNINSURED_Y1
+    - INSURCY1 -> INS_TYPE_Y1 (string labels for one-hot encoding)
     """
     df = df.copy()
 
@@ -175,42 +208,39 @@ def add_core_ins_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ============================================================
-# CORE_EMP_VARS  -> employment feature engineering
+# CORE_EMP_VARS -> employment feature engineering
 # ============================================================
+
 
 def add_core_emp_features(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Employment:
-    - EVRWRKY1 -> WORKED_Y1
+    Create employment features.
+
+    - EVRWRKY1 -> WORKED_Y1 (1 if ever worked in Year 1)
     - UNEMPY1X -> ANY_UNEMP_COMP_Y1, LOG_UNEMP_COMP_Y1
-    - EMPST1/3/5 -> *_EMPBIN + summary
+    - EMPST1/EMPST2 -> round-level binaries + R1–R2 summary indicators
     """
     df = df.copy()
 
-    # ever worked in year 1 (1 yes, 2 no)
+    # Ever worked in year 1 (1 yes, 2 no)
     if "EVRWRKY1" in df.columns:
         df["WORKED_Y1"] = (df["EVRWRKY1"] == 1).astype(int)
 
-    # unemployment compensation income
+    # Unemployment compensation income
     if "UNEMPY1X" in df.columns:
         s = df["UNEMPY1X"].fillna(0)
         df["ANY_UNEMP_COMP_Y1"] = (s > 0).astype(int)
         df["LOG_UNEMP_COMP_Y1"] = np.log1p(s)
 
-
-
-  # EMPST1/2 -> employment status binary indicators + summary
-    """
-    Year-1 EMPST summary using rounds 1 and 2 (if available).
-
-    Creates:
-    - EMPST1_EMPBIN, EMPST2_EMPBIN: 1 employed/attached, 0 not employed, NaN unknown/NIU
-    - EMP_INFO_R12: 1 if any of the two rounds has info, else 0
-    - EMP_ATTACHED_ANY_R12: 1 if employed/attached in any available round,
-                            0 if not employed in all available rounds,
-                            NaN if no info at all
-    """
-    
+    # EMPST1/EMPST2 -> employment attachment summary (Rounds 1–2)
+    #
+    # Creates:
+    # - EMPST1_EMPBIN, EMPST2_EMPBIN: 1 employed/attached, 0 not employed, NaN unknown/NIU
+    # - EMP_INFO_R12: 1 if any round has info, else 0
+    # - EMP_ATTACHED_ANY_R12: 1 if employed/attached in any available round,
+    #                         0 if not employed in all available rounds,
+    #                         NaN if no info at all
+    # - EMP_ATTACHED_ANY_R12_FILL0: NaN filled with 0 (use with EMP_INFO_R12)
     round_cols = [c for c in ["EMPST1", "EMPST2"] if c in df.columns]
     if not round_cols:
         return df
@@ -232,32 +262,30 @@ def add_core_emp_features(df: pd.DataFrame) -> pd.DataFrame:
         df[out] = df[col].map(emp_to_bin)
         empbin_cols.append(out)
 
-    # 2) Flag whether we have *any* employment info in rounds 1–2
+    # 2) Flag whether we have any employment info in rounds 1–2
     df["EMP_INFO_R12"] = df[empbin_cols].notna().any(axis=1).astype(int)
 
     # 3) Only define EMP_ATTACHED_ANY_R12 when info exists; otherwise keep NaN
     df["EMP_ATTACHED_ANY_R12"] = np.where(
         df["EMP_INFO_R12"] == 0,
-        np.nan,                               # no info at all (NIU/unknown)
-        (df[empbin_cols] == 1).any(axis=1).astype(int)  # 1 if any round says employed/attached else 0
+        np.nan,  # no info at all (NIU/unknown)
+        (df[empbin_cols] == 1).any(axis=1).astype(int),
     )
-    
-    # 4) Model-friendly version: fill NaN with 0, but keep EMP_INFO_R12 so model can distinguish NIU vs real 0
+
+    # 4) Model-friendly: fill NaN with 0, but keep EMP_INFO_R12 to distinguish NIU vs real 0
     df["EMP_ATTACHED_ANY_R12_FILL0"] = df["EMP_ATTACHED_ANY_R12"].fillna(0).astype(int)
 
     return df
 
 
-
-
 # ============================================================
-# CORE_HEALTH_STATUS_VARS  -> self-reported health features
+# CORE_HEALTH_STATUS_VARS -> self-reported health features
 # ============================================================
+
 
 def add_core_health_status_features(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Health status:
-    - RTHLTH1, MNHLTH1 -> FAIR/POOR indicators
+    Create health status indicators (fair/poor) from self-rated health measures.
     """
     df = df.copy()
 
@@ -271,7 +299,7 @@ def add_core_health_status_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ============================================================
-# CORE_CHRONIC_VARS  -> chronic condition features
+# CORE_CHRONIC_VARS -> chronic condition features
 # ============================================================
 
 CHRONIC_Y1_COLS = [
@@ -283,11 +311,15 @@ CHRONIC_Y1_COLS = [
     "DIABDXY1_M18",
 ]
 
+
 def add_core_chronic_features(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Chronic conditions:
-    - create *_BIN (1 if condition present)
-    - MULTIMORBIDITY_Y1 and MULTIMORBIDITY_GE2
+    Create chronic condition binary indicators and multi-morbidity summary features.
+
+    Creates:
+    - *_BIN: 1 if condition present (==1), else 0
+    - MULTIMORBIDITY_Y1: count of chronic conditions
+    - MULTIMORBIDITY_GE2: 1 if MULTIMORBIDITY_Y1 >= 2, else 0
     """
     df = df.copy()
 
@@ -306,35 +338,42 @@ def add_core_chronic_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ============================================================
-# CORE_USE_COST_VARS  -> baseline utilisation + targets
+# CORE_USE_COST_VARS -> baseline utilisation + targets
 # ============================================================
+
 
 def add_core_use_cost_features(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Use & cost:
-    - baseline: LOG_TOTEXPY1, ANY_ED_Y1, ANY_IP_Y1
-    - targets: LOG_TOTEXPY2, HIGHCOST_Y2, ANY_ED_Y2, ANY_IP_Y2
+    Create baseline utilization/cost features and Year-2 targets.
+
+    Baseline features:
+    - LOG_TOTEXPY1, ANY_ED_Y1, ANY_IP_Y1
+
+    Targets:
+    - LOG_TOTEXPY2 (log1p)
+    - HIGHCOST_Y2 (top 10% of raw TOTEXPY2)
+    - ANY_ED_Y2, ANY_IP_Y2
     """
     df = df.copy()
 
-    # baseline cost
+    # Baseline cost
     if REG_BASELINE_TOTEXPY1 in df.columns:
         df["LOG_TOTEXPY1"] = np.log1p(df[REG_BASELINE_TOTEXPY1])
 
-    # baseline utilisation
+    # Baseline utilization
     if ED_COUNT_Y1 in df.columns:
         df["ANY_ED_Y1"] = (df[ED_COUNT_Y1] > 0).astype(int)
     if IP_COUNT_Y1 in df.columns:
         df["ANY_IP_Y1"] = (df[IP_COUNT_Y1] > 0).astype(int)
 
-    # regression target
+    # Regression target + high-cost label
     if REG_TARGET_TOTEXPY2_RAW in df.columns:
         df[REG_TARGET_TOTEXPY2_LOG] = np.log1p(df[REG_TARGET_TOTEXPY2_RAW])
 
         q90 = df[REG_TARGET_TOTEXPY2_RAW].quantile(0.90)
         df[CLASS_TARGET_HIGHCOST_Y2] = (df[REG_TARGET_TOTEXPY2_RAW] >= q90).astype(int)
 
-    # classification targets
+    # Classification targets
     if ED_COUNT_Y2 in df.columns:
         df[CLASS_TARGET_ANY_ED_Y2] = (df[ED_COUNT_Y2] > 0).astype(int)
     if IP_COUNT_Y2 in df.columns:
@@ -347,10 +386,12 @@ def add_core_use_cost_features(df: pd.DataFrame) -> pd.DataFrame:
 # MASTER PIPELINE (mirrors the CORE_* grouping order)
 # ============================================================
 
+
 def add_features(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Feature engineering pipeline organised by CORE_* variable groups.
-    Assumes df already passed through preprocess_meps().
+    Run the feature engineering pipeline in the CORE_* group order.
+
+    Assumes df has already been processed by preprocess_meps() (see preprocessing.py).
     """
     df_feat = df.copy()
 
@@ -363,4 +404,3 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     df_feat = add_core_use_cost_features(df_feat)
 
     return df_feat
-

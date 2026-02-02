@@ -1,144 +1,188 @@
-from typing import Iterable, List, Optional
+
+"""
+Preprocessing utilities for the MEPS Panel 27 project.
+
+This module implements a whitelist-based column selection strategy and a set of
+lightweight cleaning steps to produce an analysis-ready "core" dataset from the
+2,600+ raw MEPS columns.
+
+Key steps
+---------
+1) Keep only a pre-defined set of core variables (whitelist).
+2) Optionally restrict to complete two-year panel participants.
+3) Recode MEPS special missing codes to NaN.
+4) Sanitize expenditure variables (e.g., negative values -> NaN).
+5) Drop near-empty coverage flags (PREVCOVR, MORECOVR) by default.
+
+These helpers are used across EDA and modeling notebooks.
+"""
+
+
+
 import numpy as np
 import pandas as pd
 
 from .config import WEIGHT_COL
 
 
+# ---------------------------------------------------------------------
+# Core variable whitelist
+# ---------------------------------------------------------------------
 
-# 1. Sample identifiers and panel status variables
+# 1) Sample identifiers and panel status variables
 CORE_ID_VARS = [
-    "DUID",      # dwelling unit ID 
-    "PID",       # person ID within household
-    "DUPERSID",  # unique person ID (used to merge panel, intermediate, and event files).
-    "PANEL",     # panel number (27)
-    "YEARIND",   # in both years / only 2022 / only 2023; YEARIND=1 means present in both 2022 and 2023 (recommended longitudinal subsample).
-    "ALL5RDS",   # =1 if in-scope and responded all 5 rounds
-    "DIED",      # =1 if died during 2-year period
-    "INST",      # ever institutionalized during panel (e.g., long-term care) during the two-year period.
-    "MILITARY",  # ever active duty military during the two-year period.
-    "ENTRSRVY",  # entered survey late
-    "LEFTUS",    # left US during panel
-    "OTHER",     # other special sample status (e.g., entered mid-panel, left the U.S., etc.).
+    "DUID",      # Dwelling unit ID
+    "PID",       # Person ID within household
+    "DUPERSID",  # Unique person ID (key for merges)
+    "PANEL",     # Panel number (27)
+    "YEARIND",   # Year coverage indicator; YEARIND=1 means present in both years
+    "ALL5RDS",   # =1 if in-scope and responded in all 5 rounds
+    "DIED",      # =1 if died during the 2-year period
+    "INST",      # =1 if ever institutionalized during the 2-year period
+    "MILITARY",  # =1 if ever active duty military during the 2-year period
+    "ENTRSRVY",  # Entered survey late
+    "LEFTUS",    # Left the U.S. during the panel
+    "OTHER",     # Other special sample status flags
 ]
-
-#“We restricted the sample to individuals present from the beginning of the panel (ENTRSRVY=0), with data collected in all five rounds (ALL5RDS=1) …”
-
 
 # Survey design & weights
 CORE_DESIGN_VARS = [
     WEIGHT_COL,  # LONGWT: longitudinal person weight
     "LSAQWT",    # SAQ longitudinal weight (for SAQ variables, if used)
-    "VARSTR",    # stratum identifier (sampling stratum)
+    "VARSTR",    # Stratum identifier
     "VARPSU",    # PSU identifier (Primary Sampling Unit)
 ]
 
-# VARSTR and VARPSU define the complex survey design and are used for survey-weighted estimation and variance calculation.
-
-# SAQ = Self-Administered Questionnaire (completed by adults in Rounds 2 & 4)
-
-
-# 2. Demographics
+# 2) Demographics
 CORE_DEMO_VARS = [
-    "AGEY1X", "AGEY2X",   # age end of year1 / year2
-    "AGELSTY1", "AGELSTY2",  # last age in each year
-    "SEX",        # sex
-    "RACETHX",    # race/ethnicity combined
-    "HISPANX",    # Hispanic indicator
-    "EDUCYR",     # years of education
-    "REGIONY1", "REGIONY2",  # census region year1 / year2
+    "AGEY1X",
+    "AGEY2X",       # Age end of Year 1 / Year 2
+    "AGELSTY1",
+    "AGELSTY2",     # Last observed age in each year
+    "SEX",
+    "RACETHX",      # Race/ethnicity combined
+    "HISPANX",      # Hispanic indicator
+    "EDUCYR",       # Years of education
+    "REGIONY1",
+    "REGIONY2",     # Census region Year 1 / Year 2
 ]
 
-# 3. Family socioeconomic status (SES) & household size
+# 3) Family SES & household size
 CORE_SES_VARS = [
-    "FAMINCY1", "FAMINCY2",   # family total income Y1/Y2
-    "POVCATY1", "POVCATY2",   # income as % of poverty line (categorical): poverty category / income bracket
-    "POVLEVY1", "POVLEVY2",   # income-to-poverty ratio (continuous): how many times the poverty line
-    "FAMSZEY1", "FAMSZEY2",   # family size (end of year)
-    "RUSIZEY1", "RUSIZEY2",   # reporting unit size (end of year)
+    "FAMINCY1",
+    "FAMINCY2",     # Total family income Y1/Y2
+    "POVCATY1",
+    "POVCATY2",     # Poverty category (categorical)
+    "POVLEVY1",
+    "POVLEVY2",     # Income-to-poverty ratio (continuous)
+    "FAMSZEY1",
+    "FAMSZEY2",     # Family size (end of year)
+    "RUSIZEY1",
+    "RUSIZEY2",     # Reporting unit size (end of year)
 ]
 
-# Socio-economic status (SES) was primarily measured at the family level using total family income (FAMINCY1, FAMINCY2) and official MEPS poverty categories (POVCATY1, POVCATY2). 
-# We chose family-level rather than individual income because medical expenditures are typically financed at the household level and 
-# many individuals in the sample (e.g. children, non-working spouses) have no personal earnings despite living in high-income households.
+SES_NOTES = (
+    "SES is measured at the family level using total family income (FAMINCY1/2) and MEPS poverty categories (POVCATY1/2). "
+    "Family-level measures are preferred,because expenditures are typically financed at the household level, and many individuals (e.g., children) have no personal earnings."
+    "RU (Reporting Unit) is the MEPS interviewing unit; members share a household questionnaire and it closely approximates a practical family/household unit."
+)
 
-# Reporting Unit (RU) = the interviewing unit used by MEPS
-# People in the same RU share one set of questionnaires, typically answered by a single household respondent.
-
-# An RU is not always identical to a legal 'family', but it is very close to a practical household/family unit.
-
-
-# 4. Health insurance coverage
+# 4) Health insurance coverage
 CORE_INS_VARS = [
-    "INSCOVY1", "INSCOVY2",   # full-year covered by any insurance (indicator).
-    "INSURCY1", "INSURCY2",   # full-year coverage type (e.g., <65 any private, <65 public only, <65 uninsured, 65+ Medicare only).
-    "UNINSY1", "UNINSY2",     # total months uninsured in year1/year2.
-    "PREVCOVR", "MORECOVR",   # indicators for prior coverage / multiple coverage.
+    "INSCOVY1",
+    "INSCOVY2",     # Full-year covered by any insurance (indicator)
+    "INSURCY1",
+    "INSURCY2",     # Full-year coverage type
+    "UNINSY1",
+    "UNINSY2",      # Total months uninsured
+    "PREVCOVR",
+    "MORECOVR",     # Prior coverage / multiple coverage flags (often near-empty)
 ]
 
-
-
-# 5. Employment (keep summary variables only)
+# 5) Employment (summary variables only)
 CORE_EMP_VARS = [
-    "EVRWRKY1", "EVRWRKY2",   # ever worked during year1 / year2
-    "EMPST1", "EMPST2", "EMPST3", "EMPST4", "EMPST5",  # employment status in each round
-    "UNEMPY1X", "UNEMPY2X",   # unemployed compensation amount Y1/Y2
+    "EVRWRKY1",
+    "EVRWRKY2",     # Ever worked during Year 1 / Year 2
+    "EMPST1",
+    "EMPST2",
+    "EMPST3",
+    "EMPST4",
+    "EMPST5",       # Employment status in each round
+    "UNEMPY1X",
+    "UNEMPY2X",     # Unemployment compensation amount Y1/Y2
 ]
 
-
-# 6. Self-reported health / mental health
+# 6) Self-reported health / mental health (selected rounds)
 CORE_HEALTH_STATUS_VARS = [
-    "RTHLTH1", "RTHLTH3", "RTHLTH5",   # perceived health status R1/R3/R5 (self-rated overall health: excellent/very good/good/fair/poor)
-    "MNHLTH1", "MNHLTH3", "MNHLTH5",   # perceived mental health R1/R3/R5 (self-rated mental health)
+    "RTHLTH1",
+    "RTHLTH3",
+    "RTHLTH5",      # Self-rated overall health (R1/R3/R5)
+    "MNHLTH1",
+    "MNHLTH3",
+    "MNHLTH5",      # Self-rated mental health (R1/R3/R5)
 ]
 
-
-
-
-
-# 7. Key chronic condition indicators (Y1/Y2)
+# 7) Key chronic condition indicators (Y1/Y2)
 CORE_CHRONIC_VARS = [
-    "HIBPDXY1", "HIBPDXY2",        # high blood pressure diagnosis
-    "CHDDXY1", "CHDDXY2",          # coronary heart disease diagnosis
-    "STRKDXY1", "STRKDXY2",        # stroke diagnosis
-    "CHOLDXY1", "CHOLDXY2",        # high cholesterol diagnosis
-    "ASTHDXY1", "ASTHDXY2",        # asthma diagnosis
-    "DIABDXY1_M18", "DIABDXY2_M18" # diabetes diagnosis 2022/23 
+    "HIBPDXY1",
+    "HIBPDXY2",         # High blood pressure
+    "CHDDXY1",
+    "CHDDXY2",           # Coronary heart disease
+    "STRKDXY1",
+    "STRKDXY2",          # Stroke
+    "CHOLDXY1",
+    "CHOLDXY2",          # High cholesterol
+    "ASTHDXY1",
+    "ASTHDXY2",          # Asthma
+    "DIABDXY1_M18",
+    "DIABDXY2_M18",      # Diabetes (adult measure)
 ]
 
+CHRONIC_NOTES = (
+    "These conditions are strong predictors of high cost and inpatient risk. "
+    "Keeping a small set (5–6) supports building an interpretable baseline model and enables a simple multi-morbidity index without exploding the feature space."
+)
 
-# These conditions are strong predictors of high cost and inpatient risk.
-
-# Keeping a small set (5–6) supports building an interpretable baseline model and enables a simple multi-morbidity index (count of chronic conditions) without exploding the feature space.
-
-
-# 8. Healthcare utilization & expenditures (Y1=2022, Y2=2023)
+# 8) Healthcare utilization & expenditures (Y1=2022, Y2=2023)
 CORE_USE_COST_VARS = [
     # Utilization: ED & inpatient counts (outcomes + predictors)
-    "ERTOTY1", "ERTOTY2",   # total # ER visits per year
-    "IPDISY1", "IPDISY2",   # # hospital discharges per year
+    "ERTOTY1",
+    "ERTOTY2",     # Total # ER visits per year
+    "IPDISY1",
+    "IPDISY2",     # # hospital discharges per year
 
     # Total expenditures & total charges
-    "TOTEXPY1", "TOTEXPY2",     # total health care expenditures (all payers)
-    "TOTTCHY1", "TOTTCHY2",     # total health care charges (excl Rx)
+    "TOTEXPY1",
+    "TOTEXPY2",    # Total health care expenditures (all payers)
+    "TOTTCHY1",
+    "TOTTCHY2",    # Total health care charges (excluding Rx)
 
-    # Amount paid by each payer (Y1 / Y2) — structural information + potential features
-    "TOTSLFY1", "TOTSLFY2",   # total paid by self/family 
-    "TOTMCRY1", "TOTMCRY2",   # total paid by Medicare 
-    "TOTMCDY1", "TOTMCDY2",   # total paid by Medicaid 
-    "TOTPRVY1", "TOTPRVY2",   # total paid by private insurance 
-    "TOTVAY1", "TOTVAY2",     # total paid by VA/CHAMPVA 
-    "TOTTRIY1", "TOTTRIY2",   # total paid by TRICARE  
-    "TOTOFDY1", "TOTOFDY2",   # other federal sources
-    "TOTSTLY1", "TOTSTLY2",   # other state/local sources
-    "TOTWCPY1", "TOTWCPY2",   # workers’ compensation
-    "TOTOSRY1", "TOTOSRY2",   # other sources
-    "TOTPTRY1", "TOTPTRY2",   # private + TRICARE combined
-    "TOTOTHY1", "TOTOTHY2",   # other payers combined 
+    # Amount paid by each payer (Y1/Y2)
+    "TOTSLFY1",
+    "TOTSLFY2",    # Self/family (out-of-pocket)
+    "TOTMCRY1",
+    "TOTMCRY2",    # Medicare
+    "TOTMCDY1",
+    "TOTMCDY2",    # Medicaid
+    "TOTPRVY1",
+    "TOTPRVY2",    # Private insurance
+    "TOTVAY1",
+    "TOTVAY2",     # VA/CHAMPVA
+    "TOTTRIY1",
+    "TOTTRIY2",    # TRICARE
+    "TOTOFDY1",
+    "TOTOFDY2",    # Other federal sources
+    "TOTSTLY1",
+    "TOTSTLY2",    # Other state/local sources
+    "TOTWCPY1",
+    "TOTWCPY2",    # Workers' compensation
+    "TOTOSRY1",
+    "TOTOSRY2",    # Other sources
+    "TOTPTRY1",
+    "TOTPTRY2",    # Private + TRICARE combined
+    "TOTOTHY1",
+    "TOTOTHY2",    # Other payers combined
 ]
-
-
-
 
 # Combine all core variables
 CORE_VARS = (
@@ -153,29 +197,37 @@ CORE_VARS = (
     + CORE_USE_COST_VARS
 )
 
+
 def select_core_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
-Select core variables used in the thesis / modeling from the 2,600+ raw columns.
-All other columns remain available in df_raw but are excluded from downstream EDA/modeling.
+    Select core variables used in the thesis/modeling from the 2,600+ raw columns.
 
-Returns
--------
-df_sel : DataFrame
-    DataFrame containing only columns listed in CORE_VARS that are present in the input df.
-"""
+    Notes
+    -----
+    - The raw dataframe (df_raw) remains available; this function returns a subset
+      used for downstream EDA/modeling.
+
+    Returns
+    -------
+    DataFrame
+        Dataframe containing only the columns listed in CORE_VARS that are present
+        in the input df.
+    """
     existing = [c for c in CORE_VARS if c in df.columns]
     missing = [c for c in CORE_VARS if c not in df.columns]
 
     if missing:
-        print("Warning: these core vars not found in df and will be skipped:")
+        print("Warning: these core variables were not found and will be skipped:")
         print(missing)
 
     return df[existing].copy()
 
 
-## data cleaning functions 
+# ---------------------------------------------------------------------
+# Data cleaning functions
+# ---------------------------------------------------------------------
 
-# MEPS special missing codes 
+# MEPS special missing codes
 MEPS_MISSING_CODES = [-1, -2, -3, -7, -8, -9, -13, -15]
 
 
@@ -190,95 +242,107 @@ def replace_special_missing(
     ----------
     df : DataFrame
         Input dataframe (numeric + non-numeric).
-    codes : list of int
+    codes : list[int]
         MEPS missing codes to replace, e.g. [-1, -2, -3, -7, -8, -9, -13, -15].
 
     Returns
     -------
-    df_clean : DataFrame
-        Dataframe with these codes replaced by NaN.
+    DataFrame
+        Dataframe with these codes replaced by NaN (numeric columns only).
     """
     df_clean = df.copy()
+
     # Only apply replacement to numeric columns to avoid altering string/categorical fields.
     num_cols = df_clean.select_dtypes(include=[np.number]).columns
     df_clean[num_cols] = df_clean[num_cols].replace(codes, np.nan)
+
     return df_clean
 
 
-
-# Simple cleaning: negative dollar amounts -> NaN
-
+# Expenditure columns (negative dollar amounts -> NaN)
 EXPENDITURE_COLS = [
-    "TOTEXPY1", "TOTEXPY2",
-    "TOTTCHY1", "TOTTCHY2",
-    "TOTSLFY1", "TOTSLFY2",
-    "TOTMCRY1", "TOTMCRY2",
-    "TOTMCDY1", "TOTMCDY2",
-    "TOTPRVY1", "TOTPRVY2",
-    "TOTVAY1",  "TOTVAY2",
-    "TOTTRIY1", "TOTTRIY2",
-    "TOTOFDY1", "TOTOFDY2",
-    "TOTSTLY1", "TOTSTLY2",
-    "TOTWCPY1", "TOTWCPY2",
-    "TOTOSRY1", "TOTOSRY2",
-    "TOTPTRY1", "TOTPTRY2",
-    "TOTOTHY1", "TOTOTHY2",
+    "TOTEXPY1",
+    "TOTEXPY2",
+    "TOTTCHY1",
+    "TOTTCHY2",
+    "TOTSLFY1",
+    "TOTSLFY2",
+    "TOTMCRY1",
+    "TOTMCRY2",
+    "TOTMCDY1",
+    "TOTMCDY2",
+    "TOTPRVY1",
+    "TOTPRVY2",
+    "TOTVAY1",
+    "TOTVAY2",
+    "TOTTRIY1",
+    "TOTTRIY2",
+    "TOTOFDY1",
+    "TOTOFDY2",
+    "TOTSTLY1",
+    "TOTSTLY2",
+    "TOTWCPY1",
+    "TOTWCPY2",
+    "TOTOSRY1",
+    "TOTOSRY2",
+    "TOTPTRY1",
+    "TOTPTRY2",
+    "TOTOTHY1",
+    "TOTOTHY2",
 ]
 
 
 def clean_negative_expenditures(df: pd.DataFrame) -> pd.DataFrame:
     """
     Ensure all expenditure variables are non-negative.
-    Any negative values (after missing codes replacement)
-    are set to NaN.
+    Any negative values (after missing code replacement) are set to NaN.
     """
     df_clean = df.copy()
+
     for col in EXPENDITURE_COLS:
         if col in df_clean.columns:
             df_clean.loc[df_clean[col] < 0, col] = np.nan
+
     return df_clean
-
-
 
 
 def preprocess_meps(df_raw: pd.DataFrame) -> pd.DataFrame:
     """
-    High-level preprocessing pipeline (light / default version):
+    High-level preprocessing pipeline (light/default version).
 
-    1. Select core variables.
-    2. Optionally restrict to complete panel (ALL5RDS == 1 & YEARIND == 1).
-    3. Replace MEPS special missing codes with NaN.
-    4. Clean negative expenditure values.
-    5. Drop coverage flags that are almost entirely missing (PREVCOVR, MORECOVR).
+    Steps
+    -----
+    1) Select core variables (whitelist).
+    2) Restrict to complete panel if available (ALL5RDS==1 and YEARIND==1).
+    3) Recode MEPS special missing codes to NaN.
+    4) Set negative expenditures to NaN.
+    5) Drop near-empty coverage flags (PREVCOVR, MORECOVR) if missingness > 80%.
 
-    More aggressive steps (winsorization, dropping extreme outliers)
-    are handled later in feature engineering / modeling.
+    Notes
+    -----
+    More aggressive steps (e.g., winsorization, outlier handling) are handled later
+    in feature engineering/modeling.
     """
     df = select_core_columns(df_raw).copy()
 
-    
+    # Keep complete two-year panel participants (if these variables exist)
     if "ALL5RDS" in df.columns:
         df = df[df["ALL5RDS"] == 1]
     if "YEARIND" in df.columns:
         df = df[df["YEARIND"] == 1]
 
-    # Replace special MEPS missing codes with NaN
+    # Recode special missing codes
     df = replace_special_missing(df)
 
     # Negative expenditures -> NaN
     df = clean_negative_expenditures(df)
-       
-     # Drop coverage flags that are almost entirely missing (not used as features for now)
+
+    # Drop coverage flags that are almost entirely missing (not used as features by default)
     for col in ["PREVCOVR", "MORECOVR"]:
-        if col in df.columns:
-            # Could drop directly without checking; the extra check here is safer.
-            if df[col].isna().mean() > 0.8:
-                df = df.drop(columns=col)
+        if col in df.columns and df[col].isna().mean() > 0.8:
+            df = df.drop(columns=col)
 
     return df
-
-
-
 
 
 
