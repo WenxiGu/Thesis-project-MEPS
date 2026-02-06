@@ -1,5 +1,16 @@
-# src/models.py
 
+"""
+Modeling utilities for the MEPS Panel 27 thesis project.
+
+This module provides reusable baseline modeling helpers for both regression and
+classification tasks. It standardizes:
+- feature/target definitions (via explicit column lists),
+- preprocessing for mixed numeric/categorical predictors (imputation + one-hot),
+- train/validation/test splitting,
+- baseline model training and evaluation.
+
+
+"""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +33,30 @@ from sklearn.metrics import (
     average_precision_score,
     f1_score,
 )
+
+# ---------------------------------------------------------------------
+# target column names (imported from config)
+# ---------------------------------------------------------------------
+
+
+from .config import (
+    REG_TARGET_TOTEXPY2_LOG,
+    CLASS_TARGET_HIGHCOST_Y2,
+    CLASS_TARGET_ANY_ED_Y2,
+    CLASS_TARGET_ANY_IP_Y2,
+)
+
+# All modeling targets used in this project (1 regression + 3 classification)
+TARGET_COLS = [
+    REG_TARGET_TOTEXPY2_LOG,
+    CLASS_TARGET_HIGHCOST_Y2,
+    CLASS_TARGET_ANY_ED_Y2,
+    CLASS_TARGET_ANY_IP_Y2,
+]
+
+REG_TARGET_COL = REG_TARGET_TOTEXPY2_LOG
+CLF_TARGET_COLS = [CLASS_TARGET_HIGHCOST_Y2, CLASS_TARGET_ANY_ED_Y2, CLASS_TARGET_ANY_IP_Y2]
+
 
 import joblib
 
@@ -152,7 +187,8 @@ def run_regression_baseline(
     Baseline regression on target_col using ElasticNet.
     Uses train/val/test split. Reports metrics on val and test.
     """
-    X = df[num_cols + cat_cols].copy()
+    features = cat_cols + num_cols  # explicit predictor list
+    X = df[features].copy()
     y = df[target_col].copy()
     mask = y.notna()
     X = X.loc[mask]
@@ -208,7 +244,8 @@ def run_classification_baseline(
     Chooses best threshold on validation set by F1.
     Reports AUC, PR-AUC and F1@best_t on test.
     """
-    X = df[num_cols + cat_cols].copy()
+    features = cat_cols + num_cols  # explicit predictor list
+    X = df[features].copy()
     y = df[target_col].copy().astype(int)  # assumes 0/1
     mask = y.notna()
     X = X.loc[mask]
