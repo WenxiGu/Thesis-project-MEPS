@@ -5,7 +5,7 @@ This repository contains the code, data artifacts, and MVP app for a thesis that
 **What this repo includes**
 - End‑to‑end preprocessing, feature engineering, and modeling utilities in `src/`.
 - Notebooks that document EDA, feature engineering, modeling, and evaluation in `notebooks/`.
-- Pretrained model artifacts and summary tables in `results/`.
+- Trained model artifacts and summary tables in `results/`.
 - A Streamlit MVP (“Health Outcome Predictor”) for top‑k selection in `app/`.
 - Reference documents in `docs/`.
 
@@ -13,11 +13,11 @@ This repository contains the code, data artifacts, and MVP app for a thesis that
 - Source: MEPS‑HC Panel 27 longitudinal file **HC‑252** (links 2022 + 2023 full‑year files). The public‑use file includes **8,292 individuals** and **2,648 variables** . Raw input is stored as `data/h252.xlsx` (also zipped as `data/h252xlsx.zip`).
 - Core modeling dataset: `data/df_pre.parquet` (cleaned core variables), `data/df_feat.parquet` (feature‑engineered, model‑ready).
 - Survey weights: LONGWT and design variables (VARSTR, VARPSU) are retained in the core dataset (see `src/config.py`).
-- Reference docs: `docs/thesis .docx`, `docs/MEPS HC - 252 intro.pdf`.
+- Reference docs: `docs/thesis.docx`, `docs/MEPS HC - 252 intro.pdf`.
 
 **Prediction targets**
 - Regression: `LOG_TOTEXPY2 = log1p(TOTEXPY2)`. (LOG_TOTEXPY2 is the natural log of (1 + Year‑2 total expenditures), which stabilizes the heavy‑tailed cost distribution; predictions can be converted back to dollars with TOTEXPY2 = exp(LOG_TOTEXPY2) - 1.)
-- Classification: `HIGHCOST_Y2` (top‑cost indicator), `ANY_ED_Y2` (any ED visit), `ANY_IP_Y2` (any inpatient stay).
+- Classification: `HIGHCOST_Y2` (top‑cost indicator), `ANY_ED_Y2` (any Emergency Department(ED) visit), `ANY_IP_Y2` (any inpatient stay).
 
 **Modeling approach (summary)**
 - Preprocessing: median imputation for numeric, most‑frequent for categorical, one‑hot encoding.
@@ -70,3 +70,10 @@ The app expects a feature‑engineered dataset with the schema defined in `app/m
 - MEPS Household Component (HC‑252, Panel 27), AHRQ/NCHS.
 - MEPS‑HC design & methods report (Cohen, 1997), as cited in the thesis.
 - Thesis document in `docs/thesis .docx` and HC‑252 intro in `docs/MEPS HC - 252 intro.pdf`.
+
+
+**Data Sources (MEPS HC-252)**
+- Codebook (variable definitions): https://meps.ahrq.gov/mepsweb/data_stats/download_data_files_codebook.jsp?PUFId=H252&sortBy=Start
+- Official documentation PDF: https://meps.ahrq.gov/data_stats/download_data/pufs/h252/h252doc.pdf
+- Dataset download page (HC‑252): https://meps.ahrq.gov/mepsweb/data_stats/download_data_files_detail.jsp?cboPufNumber=HC-252
+
