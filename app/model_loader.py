@@ -1,4 +1,31 @@
-# app/model_loader.py
+"""
+Model artifact loader and prediction helpers for the Streamlit app.
+
+This module centralizes:
+- The engineered feature list used at inference time (`FEATURES`),
+  split into `NUM_COLS` and `CAT_COLS`.
+- Project path discovery (find the repository root and the artifact directory).
+- Loading saved model artifacts:
+    - sklearn Pipelines saved via joblib (classification)
+    - XGBoost regression artifacts (preprocessor + Booster)
+- Prediction utilities that return probabilities (classification) or continuous
+  predictions (regression).
+
+
+Design notes
+------------
+- Categorical inputs are expected to match training-time labels; unseen categories
+  are handled by the saved OneHotEncoder (`handle_unknown="ignore"`).
+- Regression uses an XGBoost Booster trained on the log target scale
+  (`LOG_TOTEXPY2 = log1p(TOTEXPY2)`), so any dollar-scale interpretation should
+  apply an inverse transform outside this module if needed.
+"""
+
+
+
+
+
+
 from __future__ import annotations
 
 import json

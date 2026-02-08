@@ -1,4 +1,45 @@
-# scripts/train_and_save_preferred_models.py
+"""
+Train and export the preferred models for the MEPS Panel 27 project.
+
+This script loads the engineered feature table (data/df_feat.parquet), applies a
+fixed feature set (num_cols + cat_cols), trains the selected "best" models for each
+target, and saves reusable artifacts for deployment (e.g., Streamlit inference).
+
+Models trained
+--------------
+- HIGHCOST_Y2: RandomForestClassifier (class_weight="balanced_subsample")
+- ANY_ED_Y2:   XGBClassifier
+- ANY_IP_Y2:   RandomForestClassifier (class_weight="balanced_subsample")
+- LOG_TOTEXPY2: xgboost.train Booster with early stopping (regression)
+
+Training protocol
+-----------------
+- Train/validation/test split = 60/20/20 (stratified for classification).
+- Preprocessing: numeric median imputation; categorical most-frequent imputation
+  + one-hot encoding (handle_unknown="ignore").
+- Classification threshold selection: choose the probability threshold on the
+  validation set that maximizes F1, then refit on train+val and evaluate on test.
+- Regression: early stopping on validation RMSE; refit on train+val using the best
+  number of boosting iterations; evaluate on test with RMSE_log, MAE_log, and R².
+
+Outputs
+-------
+Artifacts are saved under results/model_artifacts_*:
+- sklearn Pipelines saved as .joblib (+ .meta.json)
+- XGBoost regression saved as preprocess.joblib + booster.json (+ .meta.json)
+
+Usage
+-----
+Run as a script (from anywhere inside the repository):
+    python scripts/train_and_save_preferred_models.py
+"""
+
+
+
+
+
+
+
 from __future__ import annotations
 
 from pathlib import Path

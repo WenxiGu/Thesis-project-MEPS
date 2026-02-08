@@ -1,4 +1,37 @@
-# app/app.py
+"""
+Streamlit application for MEPS Panel 27 risk and cost prediction.
+
+This app loads the saved *preferred* trained model artifacts and exposes an interactive UI to generate:
+
+- Regression: predicted Year-2 total expenditure on the log scale (`LOG_TOTEXPY2`)
+  with an optional back-transform for interpretability.
+- Classification: predicted probabilities for Year-2 outcomes:
+  `HIGHCOST_Y2`, `ANY_ED_Y2`, and `ANY_IP_Y2`.
+
+Key components
+--------------
+- Feature input form: collects the engineered predictors defined in
+  `model_loader.FEATURES` (numeric + categorical).
+- Artifact management: delegates loading and prediction logic to `model_loader.py`,
+  including preprocessing, sklearn pipelines, and the XGBoost Booster for regression.
+- Reproducibility: prints a boot timestamp to logs for deployment debugging.
+
+How to run (local)
+------------------
+From the project root (or the `app/` directory), run:
+    streamlit run app/app.py
+
+Notes
+-----
+- The app assumes the artifact directory exists under `results/` and contains the
+  saved pipelines/models and their metadata files.
+- This file intentionally keeps UI logic separate from model I/O and prediction
+  logic (see `model_loader.py`).
+"""
+
+
+
+
 from __future__ import annotations
 
 import numpy as np
