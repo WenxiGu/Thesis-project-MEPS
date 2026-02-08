@@ -79,7 +79,7 @@ def find_project_root(start: Path) -> Path:
 
 PROJECT_ROOT = find_project_root(Path.cwd())
 DATA_PATH = PROJECT_ROOT / "data" / "df_feat.parquet"
-ART_DIR = PROJECT_ROOT / "results" / "model_artifacts_sklearn 1.8.0"
+ART_DIR = PROJECT_ROOT / "results" / "model_artifacts"
 ART_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -88,7 +88,7 @@ np.random.seed(RANDOM_SEED)
 
 
 # -------------------------
-# 1) FINAL thesis feature set (your provided lists)
+# 1) FINAL thesis feature set (used in all models) - see Notebook 02 for details
 # -------------------------
 cat_cols = [
     "RACE_ETH",
@@ -304,7 +304,7 @@ def train_and_save_regression_xgb_booster(
         "tree_method": "hist",
         "seed": RANDOM_SEED,
 
-        # your best ES config
+        # the best ES config
         "max_depth": 3,
         "eta": 0.02,
         "subsample": 0.8,
@@ -393,11 +393,25 @@ def main():
     ed_meta, ed_paths = train_and_save_classifier(df, target="ANY_ED_Y2", name="clf_ed_xgb", estimator=ed_est, stratify=True)
     print("Saved ANY_ED:", ed_paths, "best_t:", ed_meta["best_threshold"])
 
-    # -------- ANY_IP (RF) --------
-    ip_est = RandomForestClassifier(
-        n_estimators=800, max_depth=16, min_samples_leaf=3,
-        random_state=RANDOM_SEED, n_jobs=-1, class_weight="balanced_subsample"
+    # -------- ANY_IP (RF tuned) --------
+
+    rf_ip_params = dict(
+    n_estimators=1500,
+    max_depth=18,
+    min_samples_leaf=5,
+    min_samples_split=10,
+    max_features=0.2,
+    max_samples=0.7,
+    bootstrap=True,
     )
+
+    ip_est = RandomForestClassifier(
+    **rf_ip_params,
+    random_state=RANDOM_SEED,
+    n_jobs=-1,
+    class_weight="balanced_subsample",
+   )
+
     ip_meta, ip_paths = train_and_save_classifier(df, target="ANY_IP_Y2", name="clf_ip_rf", estimator=ip_est, stratify=True)
     print("Saved ANY_IP:", ip_paths, "best_t:", ip_meta["best_threshold"])
 
