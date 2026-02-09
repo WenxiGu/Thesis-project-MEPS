@@ -69,7 +69,7 @@ The app expects a feature‑engineered dataset with the schema defined in `app/m
 **Citations (brief)**
 - MEPS Household Component (HC‑252, Panel 27), AHRQ/NCHS.
 - MEPS‑HC design & methods report (Cohen, 1997), as cited in the thesis.
-- Thesis document in `docs/thesis .docx` and HC‑252 intro in `docs/MEPS HC - 252 intro.pdf`.
+- Thesis document in `docs/thesis.docx` and HC‑252 intro in `docs/MEPS HC - 252 intro.pdf`.
 
 
 **Data Sources (MEPS HC-252)**
