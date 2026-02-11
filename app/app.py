@@ -118,6 +118,14 @@ def add_reason_tags(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def get_required_cols(meta: dict | None, fallback: list[str]) -> list[str]:
+    return (meta or {}).get("feature_cols") or fallback
+
+
+def get_missing_cols(df: pd.DataFrame, cols: list[str]) -> list[str]:
+    return [c for c in cols if c not in df.columns]
+
+
 # -----------------------
 # UI
 # -----------------------
@@ -177,6 +185,12 @@ if mode.startswith("Classification"):
 
     pipe, meta = load_classification_artifact(ART_DIR, artifact_name)
 
+    req_cols = get_required_cols(meta, FEATURES)
+    missing = get_missing_cols(df, req_cols)
+    if missing:
+        st.error(f"Missing required feature columns: {missing}")
+        st.stop()
+
     try:
         proba = predict_classification(pipe, meta, df)
     except KeyError as e:
@@ -204,8 +218,8 @@ if mode.startswith("Classification"):
     c1, c2, c3 = st.columns(3)
     c1.metric("Rows scored", f"{len(out):,}")
     c2.metric(f"Top {int(top_frac*100)}% selected", f"{k:,}")
-    thr = float(out.loc[out["selected_topk"]==1, "score"].min())
-    c3.metric("Top-k score threshold", f"{thr:.3f}")
+    thr = float(out.loc[out["selected_topk"] == 1, "score"].min()) if k > 0 else None
+    c3.metric("Top-k score threshold", f"{thr:.3f}" if thr is not None else "N/A")
 
 
     st.subheader("Ranked list")
@@ -223,6 +237,12 @@ if mode.startswith("Classification"):
 else:
     pre, booster, meta = load_regression_booster_artifact(ART_DIR, REG_NAME)
 
+    req_cols = get_required_cols(meta, FEATURES)
+    missing = get_missing_cols(df, req_cols)
+    if missing:
+        st.error(f"Missing required feature columns: {missing}")
+        st.stop()
+
     try:
         pred = predict_regression(pre, booster, meta, df)
     except KeyError as e:
@@ -237,14 +257,10 @@ else:
     out = df.copy()
     out["pred_log_cost"] = pred
     out["pred_cost_usd"] = np.expm1(out["pred_log_cost"]).clip(lower=0)
-    
-    out["pred_log_cost"] = out["pred_log_cost"].round(4)
-    out["pred_cost_usd"] = out["pred_cost_usd"].round(0).astype(int)
-    out["pred_cost_usd_fmt"] = out["pred_cost_usd"].map(lambda x: f"${x:,}")
 
 
 
-    # rank by USD cost (equivalent monotonic transform, but clearer)
+    # rank by USD cost (equivalent transform, but clearer)
     out, k = topk_select(out, "pred_cost_usd", top_frac)
 
     overall_mean_cost = float(out["pred_cost_usd"].mean())
@@ -264,34 +280,33 @@ else:
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Rows scored", f"{len(out):,}")
     c2.metric(f"Top {int(top_frac*100)}% selected", f"{k:,}")
-    thr = float(out.loc[out["selected_topk"]==1, "pred_cost_usd"].min())
-    c3.metric("Top-k cost threshold (USD)", f"{thr:,.0f}")
+    thr = float(out.loc[out["selected_topk"] == 1, "pred_cost_usd"].min()) if k > 0 else None
+    c3.metric("Top-k cost threshold (USD)", f"{thr:,.0f}" if thr is not None else "N/A")
     c4.metric("Median predicted cost (USD)", f"{med_usd:,.0f}")
 
-    st.caption(f"Top {int(top_frac*100)}% threshold ≈ ${p90_usd:,.0f} predicted Year-2 total expenditure.")
+
+    # formatted display column (currency with 3 decimals)
+    out["pred_cost_usd_fmt"] = out["pred_cost_usd"].map(lambda x: f"${x:,.3f}")
 
     st.subheader("Ranked list (highest predicted cost first)")
     base_cols = ["pred_cost_usd_fmt", "selected_topk"]
-    # keep log cost optional (nice for debugging)
+    # keep log cost optional 
     optional_cols = ["pred_log_cost"]
     cols_to_show = base_cols + optional_cols + show_cols
     cols_to_show = [c for c in cols_to_show if c in out.columns]
 
     
     st.dataframe(
-    out.sort_values("pred_cost_usd", ascending=False)[cols_to_show].head(max_rows),
-    use_container_width=True,
-    column_config={
-        "pred_cost_usd": st.column_config.NumberColumn(
-            "pred_cost_usd (USD)",
-            format="$%,d",
-        ),
-        "pred_log_cost": st.column_config.NumberColumn(
-            "pred_log_cost",
-            format="%.4f",
-        ),
-    },
-)
+        out.sort_values("pred_cost_usd", ascending=False)[cols_to_show].head(max_rows),
+        use_container_width=True,
+        column_config={
+            "pred_cost_usd_fmt": "pred_cost_usd (USD)",
+            "pred_log_cost": st.column_config.NumberColumn(
+                "pred_log_cost",
+                format="%.4f",
+            ),
+        },
+    )
 
 
     
@@ -299,7 +314,6 @@ else:
     st.download_button(
     "Download scored CSV",
     data=out.sort_values("pred_cost_usd", ascending=False)
-          .drop(columns=["pred_cost_usd_fmt"], errors="ignore")
           .to_csv(index=False).encode("utf-8"),
     file_name="scored_reg_totexpy2_usd.csv",
     mime="text/csv",
