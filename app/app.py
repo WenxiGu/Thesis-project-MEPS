@@ -180,6 +180,16 @@ with st.sidebar.expander("Features used (hard-coded)"):
 # Main
 # -----------------------
 if mode.startswith("Classification"):
+    st.markdown(
+        "**How to read this**\n\n"
+        "Score = predicted probability of the Year‑2 target (higher = higher risk).\n\n"
+        "Selected_topk = 1 if the row is in the top‑k fraction.\n\n"
+        "Top‑k threshold = lowest score among selected rows.\n\n"
+        "Lift = selected mean risk / overall mean risk.\n\n"
+        "Reason tags are simple rule‑based hints (not causal explanations).\n"
+    )
+
+if mode.startswith("Classification"):
     target_label = st.sidebar.selectbox("Target model", list(CLF_MAP.keys()))
     artifact_name = CLF_MAP[target_label]
 
@@ -204,6 +214,8 @@ if mode.startswith("Classification"):
     out["score"] = proba
     out, k = topk_select(out, "score", top_frac)
     out = add_reason_tags(out)
+    if "LOG_TOTEXPY1" in out.columns:
+        out["TOTEXPY1_USD"] = np.expm1(out["LOG_TOTEXPY1"]).clip(lower=0)
 
     overall_mean = float(out["score"].mean())
     selected_mean = float(out.loc[out["selected_topk"] == 1, "score"].mean())
@@ -223,9 +235,24 @@ if mode.startswith("Classification"):
 
 
     st.subheader("Ranked list")
-    cols_to_show = ["score", "selected_topk", "reason_tags"] + show_cols
+    display_cols = []
+    for c in show_cols:
+        if c == "LOG_TOTEXPY1" and "TOTEXPY1_USD" in out.columns:
+            display_cols.append("TOTEXPY1_USD")
+        else:
+            display_cols.append(c)
+    cols_to_show = ["score", "selected_topk", "reason_tags"] + display_cols
     cols_to_show = [c for c in cols_to_show if c in out.columns]
-    st.dataframe(out[cols_to_show].head(max_rows), use_container_width=True)
+    st.dataframe(
+        out[cols_to_show].head(max_rows),
+        use_container_width=True,
+        column_config={
+            "TOTEXPY1_USD": st.column_config.NumberColumn(
+                "TOTEXPY1_USD (USD)",
+                format="$%,.0f",
+            ),
+        },
+    )
 
     st.download_button(
         "Download scored CSV",
