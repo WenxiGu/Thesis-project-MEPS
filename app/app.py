@@ -170,8 +170,35 @@ top_frac = st.sidebar.selectbox("Top-k fraction", [0.05, 0.10, 0.20], index=1)
 max_rows = st.sidebar.slider("Rows to display", 50, 2000, 200, 50)
 
 # Display columns
-default_show = [c for c in ["AGE", "LOG_TOTEXPY1", "ANY_ED_Y1", "ANY_IP_Y1"] if c in df.columns]
-show_cols = st.sidebar.multiselect("Extra columns to display", df.columns.tolist(), default=default_show)
+use_usd_label = mode.startswith("Classification")
+extra_cols_options = []
+label_to_col = {}
+for c in df.columns.tolist():
+    if use_usd_label and c == "LOG_TOTEXPY1":
+        label = "TOTEXPY1 (USD)"
+        # avoid duplicates if label already exists
+        if label not in label_to_col:
+            extra_cols_options.append(label)
+            label_to_col[label] = c
+    else:
+        extra_cols_options.append(c)
+        label_to_col[c] = c
+
+default_show_labels = []
+for c in ["AGE", "LOG_TOTEXPY1", "ANY_ED_Y1", "ANY_IP_Y1"]:
+    if c not in df.columns:
+        continue
+    if use_usd_label and c == "LOG_TOTEXPY1":
+        default_show_labels.append("TOTEXPY1 (USD)")
+    else:
+        default_show_labels.append(c)
+
+show_labels = st.sidebar.multiselect(
+    "Extra columns to display",
+    extra_cols_options,
+    default=default_show_labels,
+)
+show_cols = [label_to_col[l] for l in show_labels if l in label_to_col]
 
 with st.sidebar.expander("Features used (hard-coded)"):
     st.write(FEATURES)
@@ -216,6 +243,7 @@ if mode.startswith("Classification"):
     out = add_reason_tags(out)
     if "LOG_TOTEXPY1" in out.columns:
         out["TOTEXPY1_USD"] = np.expm1(out["LOG_TOTEXPY1"]).clip(lower=0)
+        out["TOTEXPY1_USD_FMT"] = out["TOTEXPY1_USD"].map(lambda x: f"${x:,.3f}")
 
     overall_mean = float(out["score"].mean())
     selected_mean = float(out.loc[out["selected_topk"] == 1, "score"].mean())
@@ -237,8 +265,8 @@ if mode.startswith("Classification"):
     st.subheader("Ranked list")
     display_cols = []
     for c in show_cols:
-        if c == "LOG_TOTEXPY1" and "TOTEXPY1_USD" in out.columns:
-            display_cols.append("TOTEXPY1_USD")
+        if c == "LOG_TOTEXPY1" and "TOTEXPY1_USD_FMT" in out.columns:
+            display_cols.append("TOTEXPY1_USD_FMT")
         else:
             display_cols.append(c)
     cols_to_show = ["score", "selected_topk", "reason_tags"] + display_cols
@@ -247,10 +275,7 @@ if mode.startswith("Classification"):
         out[cols_to_show].head(max_rows),
         use_container_width=True,
         column_config={
-            "TOTEXPY1_USD": st.column_config.NumberColumn(
-                "TOTEXPY1_USD (USD)",
-                format="$%,.0f",
-            ),
+            "TOTEXPY1_USD_FMT": "TOTEXPY1 (USD)",
         },
     )
 
