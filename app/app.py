@@ -170,35 +170,8 @@ top_frac = st.sidebar.selectbox("Top-k fraction", [0.05, 0.10, 0.20], index=1)
 max_rows = st.sidebar.slider("Rows to display", 50, 2000, 200, 50)
 
 # Display columns
-use_usd_label = mode.startswith("Classification")
-extra_cols_options = []
-label_to_col = {}
-for c in df.columns.tolist():
-    if use_usd_label and c == "LOG_TOTEXPY1":
-        label = "TOTEXPY1 (USD)"
-        # avoid duplicates if label already exists
-        if label not in label_to_col:
-            extra_cols_options.append(label)
-            label_to_col[label] = c
-    else:
-        extra_cols_options.append(c)
-        label_to_col[c] = c
-
-default_show_labels = []
-for c in ["AGE", "LOG_TOTEXPY1", "ANY_ED_Y1", "ANY_IP_Y1"]:
-    if c not in df.columns:
-        continue
-    if use_usd_label and c == "LOG_TOTEXPY1":
-        default_show_labels.append("TOTEXPY1 (USD)")
-    else:
-        default_show_labels.append(c)
-
-show_labels = st.sidebar.multiselect(
-    "Extra columns to display",
-    extra_cols_options,
-    default=default_show_labels,
-)
-show_cols = [label_to_col[l] for l in show_labels if l in label_to_col]
+default_show = [c for c in ["AGE", "LOG_TOTEXPY1", "ANY_ED_Y1", "ANY_IP_Y1"] if c in df.columns]
+show_cols = st.sidebar.multiselect("Extra columns to display", df.columns.tolist(), default=default_show)
 
 with st.sidebar.expander("Features used (hard-coded)"):
     st.write(FEATURES)
@@ -362,6 +335,7 @@ else:
 
 
     
+
      
     st.download_button(
     "Download scored CSV",
