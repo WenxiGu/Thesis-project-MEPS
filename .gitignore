@@ -6,3 +6,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.streamlit/
+app/.streamlit/
+app/__pycache__/
+app/.cache/

@@ -246,7 +246,7 @@ if mode.startswith("Classification"):
     cols_to_show = [c for c in cols_to_show if c in out.columns]
     st.dataframe(
         out[cols_to_show].head(max_rows),
-        use_container_width=True,
+        width="stretch",
         column_config={
             "TOTEXPY1_USD_FMT": "TOTEXPY1 (USD)",
         },
@@ -323,7 +323,7 @@ else:
     
     st.dataframe(
         out.sort_values("pred_cost_usd", ascending=False)[cols_to_show].head(max_rows),
-        use_container_width=True,
+        width="stretch",
         column_config={
             "pred_cost_usd_fmt": "pred_cost_usd (USD)",
             "pred_log_cost": st.column_config.NumberColumn(
