@@ -38,6 +38,7 @@ This repository contains the code, data artifacts, and MVP app for a thesis that
 - `src/` reusable preprocessing, feature engineering, and modeling code.
 
 **Setup**
+
 Python 3.12 is recommended.
 
 **Notebook environment (thesis)**
@@ -61,7 +62,9 @@ python src/train_and_save_preferred_models.py
 ```
 
 **Run the MVP app**
+
 **Local run (macOS)**
+
 Create a virtual environment (choose one):
 ```bash
 # venv
