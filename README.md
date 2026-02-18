@@ -49,15 +49,46 @@ Notebooks (run in order):
 - `notebooks/04_Model Predictions.ipynb`
 - `notebooks/05_weighted evaluation.ipynb`
 
-Train and export preferred models:
+**Train and export preferred models**
 ```bash
 python src/train_and_save_preferred_models.py
 ```
 
-
 **Run the MVP app**
+**Local run (macOS)**
+Create a virtual environment (choose one):
 ```bash
-streamlit run app/app.py
+# venv
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+```bash
+# conda (recommended on mac)
+conda create -n meps_app python=3.12 -y
+conda activate meps_app
+```
+
+Install dependencies:
+```bash
+python -m pip install -U pip
+python -m pip install -r requirements.txt
+```
+
+If you hit XGBoost/OpenMP errors on macOS:
+```bash
+brew install libomp
+python -m pip install --force-reinstall --no-cache-dir xgboost
+```
+
+Or use conda to avoid OpenMP issues:
+```bash
+conda install -c conda-forge xgboost llvm-openmp -y
+```
+
+Run the app:
+```bash
+python -m streamlit run app/app.py
 ```
 
 The app expects a feature‑engineered dataset with the schema defined in `app/model_loader.py` and can use `data/df_feat.parquet` in demo mode.
@@ -76,4 +107,3 @@ The app expects a feature‑engineered dataset with the schema defined in `app/m
 - Codebook (variable definitions): https://meps.ahrq.gov/mepsweb/data_stats/download_data_files_codebook.jsp?PUFId=H252&sortBy=Start
 - Official documentation PDF: https://meps.ahrq.gov/data_stats/download_data/pufs/h252/h252doc.pdf
 - Dataset download page (HC‑252): https://meps.ahrq.gov/mepsweb/data_stats/download_data_files_detail.jsp?cboPufNumber=HC-252
-
