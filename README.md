@@ -13,7 +13,7 @@ This repository contains the code, data artifacts, and MVP app for a thesis that
 - Source: MEPS‑HC Panel 27 longitudinal file **HC‑252** (links 2022 + 2023 full‑year files). The public‑use file includes **8,292 individuals** and **2,648 variables** . Raw input is stored as `data/h252.xlsx` (also zipped as `data/h252xlsx.zip`).
 - Core modeling dataset: `data/df_pre.parquet` (cleaned core variables), `data/df_feat.parquet` (feature‑engineered, model‑ready).
 - Survey weights: LONGWT and design variables (VARSTR, VARPSU) are retained in the core dataset (see `src/config.py`).
-- Reference docs: `docs/thesis.docx`, `docs/MEPS HC - 252 intro.pdf`.
+- Reference docs: `docs/thesis.pdf`, `docs/MEPS HC - 252 intro.pdf`.
 
 **Prediction targets**
 - Regression: `LOG_TOTEXPY2 = log1p(TOTEXPY2)`. (LOG_TOTEXPY2 is the natural log of (1 + Year‑2 total expenditures), which stabilizes the heavy‑tailed cost distribution; predictions can be converted back to dollars with TOTEXPY2 = exp(LOG_TOTEXPY2) - 1.)
@@ -40,6 +40,12 @@ This repository contains the code, data artifacts, and MVP app for a thesis that
 **Setup**
 Python 3.12 is recommended.
 
+**Notebook environment (thesis)**
+```bash
+# Conda 
+conda env create -f notebooks/environment_thesis.yml
+conda activate meps
+```
 
 **Reproduce the analysis**
 Notebooks (run in order):

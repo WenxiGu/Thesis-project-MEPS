@@ -13,9 +13,9 @@ A Streamlit MVP that scores individuals using pre-trained models and supports ca
 
 ## Requirements
 - Python 3.12 recommended
-- Dependencies in `requirements.txt` (pip)
+- Dependencies in `requirements.txt` or `app/requirements_app.txt` (pip)
 
-## Local run (macOS)**
+## Local run (macOS)
 Create a virtual environment (choose one):
 ```bash
 # venv
