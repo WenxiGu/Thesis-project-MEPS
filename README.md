@@ -63,40 +63,12 @@ python src/train_and_save_preferred_models.py
 
 **Run the MVP app**
 
-**Local run (macOS)**
+**Local run**
 
-Create a virtual environment (choose one):
+Create the MVP app environment (conda) and run:
 ```bash
-# venv
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-```bash
-# conda (recommended on mac)
-conda create -n meps_app python=3.12 -y
-conda activate meps_app
-```
-
-Install dependencies:
-```bash
-python -m pip install -U pip
-python -m pip install -r requirements.txt
-```
-
-If you hit XGBoost/OpenMP errors on macOS:
-```bash
-brew install libomp
-python -m pip install --force-reinstall --no-cache-dir xgboost
-```
-
-Or use conda to avoid OpenMP issues:
-```bash
-conda install -c conda-forge xgboost llvm-openmp -y
-```
-
-Run the app:
-```bash
+conda env create -f app/environment_app.yml
+conda activate meps_mvp
 python -m streamlit run app/app.py
 ```
 
