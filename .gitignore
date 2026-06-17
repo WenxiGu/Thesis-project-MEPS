@@ -10,3 +10,13 @@ __pycache__/
 app/.streamlit/
 app/__pycache__/
 app/.cache/
+
+# Local MEPS data files are not redistributed in this public repository.
+data/*.xlsx
+data/*.xls
+data/*.zip
+data/*.csv
+data/*.parquet
+data/*.dta
+data/*.sas7bdat
+!data/README.md

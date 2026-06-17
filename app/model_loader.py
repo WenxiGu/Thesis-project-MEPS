@@ -84,12 +84,12 @@ FEATURES = CAT_COLS + NUM_COLS
 
 
 def get_project_root() -> Path:
-    """Find project root by looking for data/df_feat.parquet (up to 8 levels)."""
+    """Find project root by looking for stable repository directories."""
     cur = Path(__file__).resolve()
     for i, cand in enumerate(cur.parents):
         if i >= 8:
             break
-        if (cand / "data" / "df_feat.parquet").exists():
+        if (cand / "src").exists() and (cand / "results").exists() and (cand / "app").exists():
             return cand
     # fallback: parent of app/
     return cur.parents[1]

@@ -71,16 +71,24 @@ from sklearn.model_selection import train_test_split
 # -------------------------
 def find_project_root(start: Path) -> Path:
     cur = start.resolve()
-    for _ in range(6):
-        if (cur / "data" / "df_feat.parquet").exists():
+    for _ in range(8):
+        if (cur / "src").exists() and (cur / "notebooks").exists() and (cur / "results").exists():
             return cur
         cur = cur.parent
-    raise FileNotFoundError("Could not find project root containing data/df_feat.parquet")
+    raise FileNotFoundError("Could not find project root. Run this from inside the repository.")
 
 PROJECT_ROOT = find_project_root(Path.cwd())
 DATA_PATH = PROJECT_ROOT / "data" / "df_feat.parquet"
 ART_DIR = PROJECT_ROOT / "results" / "model_artifacts"
 ART_DIR.mkdir(parents=True, exist_ok=True)
+
+if not DATA_PATH.exists():
+    raise FileNotFoundError(
+        "Missing data/df_feat.parquet. This row-level derived dataset is not tracked in git. "
+        "Download MEPS HC-252 from AHRQ/MEPS, save it as data/h252.xlsx, and run the "
+        "preprocessing/feature-engineering notebooks first. Official download page: "
+        "https://meps.ahrq.gov/mepsweb/data_stats/download_data_files_detail.jsp?cboPufNumber=HC-252"
+    )
 
 
 RANDOM_SEED = 42

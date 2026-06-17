@@ -1,90 +1,154 @@
 # MEPS Panel 27 Risk & Cost Prediction (Thesis Project)
 
-This repository contains the code, data artifacts, and MVP app for a thesis that predicts Year-2 health care costs and acute events from Year-1 features using the MEPS Household Component (Panel 27, HC-252; 2022–2023). The primary use case is **risk stratification via top‑k ranking** rather than deterministic individual prediction.
+This repository contains the code, notebooks, model artifacts, aggregate outputs, and a
+Streamlit MVP for a master's thesis project that predicts Year-2 health care costs and
+acute utilization from Year-1 features using the Medical Expenditure Panel Survey
+Household Component (MEPS-HC), Panel 27 Longitudinal Public Use File HC-252
+(2022-2023).
 
-**What this repo includes**
-- End‑to‑end preprocessing, feature engineering, and modeling utilities in `src/`.
-- Notebooks that document EDA, feature engineering, modeling, and evaluation in `notebooks/`.
-- Trained model artifacts and summary tables in `results/`.
-- A Streamlit MVP (“Health Outcome Predictor”) for top‑k selection in `app/`.
-- Reference documents in `docs/`.
+The primary use case is risk stratification via top-k ranking rather than deterministic
+individual clinical prediction.
 
-**Data**
-- Source: MEPS‑HC Panel 27 longitudinal file **HC‑252** (links 2022 + 2023 full‑year files). The public‑use file includes **8,292 individuals** and **2,648 variables** . Raw input is stored as `data/h252.xlsx` (also zipped as `data/h252xlsx.zip`).
-- Core modeling dataset: `data/df_pre.parquet` (cleaned core variables), `data/df_feat.parquet` (feature‑engineered, model‑ready).
-- Survey weights: LONGWT and design variables (VARSTR, VARPSU) are retained in the core dataset (see `src/config.py`).
-- Reference docs: `docs/thesis.pdf`, `docs/MEPS HC - 252 intro.pdf`.
+## What This Repository Includes
 
-**Prediction targets**
-- Regression: `LOG_TOTEXPY2 = log1p(TOTEXPY2)`. (LOG_TOTEXPY2 is the natural log of (1 + Year‑2 total expenditures), which stabilizes the heavy‑tailed cost distribution; predictions can be converted back to dollars with TOTEXPY2 = exp(LOG_TOTEXPY2) - 1.)
-- Classification: `HIGHCOST_Y2` (top‑cost indicator), `ANY_ED_Y2` (any Emergency Department(ED) visit), `ANY_IP_Y2` (any inpatient stay).
+- End-to-end preprocessing, feature engineering, and modeling utilities in `src/`
+- Notebooks for EDA, feature engineering, modeling, and evaluation in `notebooks/`
+- Aggregate figures, summary tables, and trained model artifacts in `results/`
+- A Streamlit MVP for top-k selection in `app/`
+- Reference documentation in `docs/`
 
-**Modeling approach (summary)**
-- Preprocessing: median imputation for numeric, most‑frequent for categorical, one‑hot encoding.
-- Baselines and helpers in `src/models.py`.
-- Evaluation emphasizes ranking metrics (ROC AUC, PR‑AUC) plus F1 at a validation‑selected threshold.
+## Data Source and Download
 
-**Key results (test set)**
-- HIGHCOST_Y2: AUC 0.868, PR‑AUC 0.459, F1@t* 0.536 (Random Forest).
-- ANY_ED_Y2: AUC 0.728, PR‑AUC 0.350, F1@t* 0.366 (XGBoost).
-- ANY_IP_Y2: AUC 0.755, PR‑AUC 0.225, F1@t* 0.285 (Tuned Random Forest).
-- LOG_TOTEXPY2: RMSE_log 2.15, R² 0.53 (XGBoost w/ early stopping).
+This project uses the official MEPS-HC Panel 27 Longitudinal Public Use File:
 
-**Repository structure**
-- `app/` Streamlit MVP for top‑k selection and CSV export (see `app/README.md`).
-- `data/` raw and processed datasets.
-- `notebooks/` EDA and modeling workflow.
-- `results/` figures, tables, and model artifacts used by the app.
-- `src/` reusable preprocessing, feature engineering, and modeling code.
+- Dataset: **HC-252: Panel 27 Longitudinal Data File**
+- Years linked: **2022 and 2023**
+- Publisher: **Agency for Healthcare Research and Quality (AHRQ), Medical Expenditure Panel Survey (MEPS)**
+- Official dataset page: <https://meps.ahrq.gov/mepsweb/data_stats/download_data_files_detail.jsp?cboPufNumber=HC-252>
+- Official documentation: <https://meps.ahrq.gov/data_stats/download_data/pufs/h252/h252doc.shtml>
+- Codebook / variable definitions: <https://meps.ahrq.gov/mepsweb/data_stats/download_data_files_codebook.jsp?PUFId=H252&sortBy=Start>
 
-**Setup**
+The HC-252 public-use file includes 8,292 individuals and 2,648 variables. For this
+project, the Excel version of the file was used as the raw input.
+
+## Data Use and Redistribution
+
+This repository does **not** redistribute the raw MEPS public-use microdata or
+row-level derived datasets. To reproduce the analysis, download the official HC-252
+file directly from AHRQ/MEPS and place it locally under `data/`.
+
+Recommended local file layout:
+
+```text
+data/
+  h252.xlsx          # official MEPS HC-252 Excel file downloaded from AHRQ
+  df_pre.parquet    # locally generated cleaned/intermediate dataset
+  df_feat.parquet   # locally generated feature-engineered dataset
+```
+
+These files are ignored by git. See `data/README.md` for details.
+
+By using MEPS data, users are responsible for complying with the MEPS/AHRQ Data Use
+Agreement. In particular, the data should be used only for statistical reporting and
+analysis; users must not attempt to identify individuals or establishments; and MEPS
+should be cited as the data source in any research outputs.
+
+## Prediction Targets
+
+- Regression: `LOG_TOTEXPY2 = log1p(TOTEXPY2)`
+- Classification:
+  - `HIGHCOST_Y2`: high-cost status in Year 2
+  - `ANY_ED_Y2`: any emergency department visit in Year 2
+  - `ANY_IP_Y2`: any inpatient stay in Year 2
+
+## Modeling Approach
+
+- Preprocessing: median imputation for numeric features, most-frequent imputation for
+  categorical features, and one-hot encoding
+- Models: ElasticNet, logistic regression, Random Forest, XGBoost, and MLP
+- Evaluation: ROC-AUC, PR-AUC, F1 at validation-selected thresholds, and top-k risk
+  ranking views for capacity-constrained use cases
+
+## Key Results (Test Set)
+
+- `HIGHCOST_Y2`: AUC 0.868, PR-AUC 0.459, F1@t* 0.536 (Random Forest)
+- `ANY_ED_Y2`: AUC 0.728, PR-AUC 0.350, F1@t* 0.366 (XGBoost)
+- `ANY_IP_Y2`: AUC 0.755, PR-AUC 0.225, F1@t* 0.285 (Tuned Random Forest)
+- `LOG_TOTEXPY2`: RMSE_log 2.15, R2 0.53 (XGBoost with early stopping)
+
+## Repository Structure
+
+```text
+app/        Streamlit MVP for top-k selection and CSV export
+data/       Local data directory; data files are not tracked
+docs/       Thesis and MEPS reference documents
+notebooks/  EDA, data preparation, modeling, and evaluation workflow
+results/    Aggregate figures, summary tables, and trained model artifacts
+src/        Reusable preprocessing, feature engineering, and modeling code
+```
+
+## Setup
 
 Python 3.12 is recommended.
 
-**Notebook environment (thesis)**
+Notebook environment:
+
 ```bash
-# Conda 
 conda env create -f notebooks/environment_thesis.yml
 conda activate meps
 ```
 
-**Reproduce the analysis**
-Notebooks (run in order):
-- `notebooks/01_EDA.ipynb`
-- `notebooks/02_Data Preparation & Feature Engineering.ipynb`
-- `notebooks/03_Modeling_baseline.ipynb`
-- `notebooks/04_Model Predictions.ipynb`
-- `notebooks/05_weighted evaluation.ipynb`
+## Reproduce the Analysis
 
-**Train and export preferred models**
+1. Download the official HC-252 Excel file from AHRQ/MEPS:
+   <https://meps.ahrq.gov/mepsweb/data_stats/download_data_files_detail.jsp?cboPufNumber=HC-252>
+2. Save the Excel file locally as:
+
+```text
+data/h252.xlsx
+```
+
+3. Run the notebooks in order:
+
+```text
+notebooks/01_EDA.ipynb
+notebooks/02_Data Preparation & Feature Engineering.ipynb
+notebooks/03_modeling_baseline.ipynb
+notebooks/04_Model Predictions.ipynb
+notebooks/05_weighted evaluation.ipynb
+```
+
+4. Train and export preferred models:
+
 ```bash
 python src/train_and_save_preferred_models.py
 ```
 
-**Run the MVP app**
+## Run the MVP App
 
-**Local run**
+Create the app environment and launch Streamlit:
 
-Create the MVP app environment (conda) and run:
 ```bash
 conda env create -f app/environment_app.yml
 conda activate meps_mvp
 python -m streamlit run app/app.py
 ```
 
-The app expects a feature‑engineered dataset with the schema defined in `app/model_loader.py` and can use `data/df_feat.parquet` in demo mode.
+The app expects a feature-engineered dataset with the schema defined in
+`app/model_loader.py`. For local demo mode, generate `data/df_feat.parquet` by running
+the preprocessing and feature engineering workflow first.
 
-**Notes on use**
-- The models are intended for ranking and top‑k selection, not deterministic clinical prediction.
-- The MVP includes simple rule‑based “reason tags” for interpretability and plausibility checks; these are not causal attributions.
+## Notes on Use
 
-**Citations (brief)**
-- MEPS Household Component (HC‑252, Panel 27), AHRQ/NCHS.
-- MEPS‑HC design & methods report (Cohen, 1997), as cited in the thesis.
-- Thesis document in `docs/thesis.docx` and HC‑252 intro in `docs/MEPS HC - 252 intro.pdf`.
+- The models are intended for risk ranking and top-k prioritization, not diagnosis or
+  deterministic clinical prediction.
+- The MVP includes simple rule-based reason tags for readability and plausibility
+  checks. They are not causal explanations or model-derived local attributions.
+- Outputs should be interpreted as statistical decision-support artifacts and reviewed
+  with appropriate human oversight.
 
+## Citation
 
-**Data Sources (MEPS HC-252)**
-- Codebook (variable definitions): https://meps.ahrq.gov/mepsweb/data_stats/download_data_files_codebook.jsp?PUFId=H252&sortBy=Start
-- Official documentation PDF: https://meps.ahrq.gov/data_stats/download_data/pufs/h252/h252doc.pdf
-- Dataset download page (HC‑252): https://meps.ahrq.gov/mepsweb/data_stats/download_data_files_detail.jsp?cboPufNumber=HC-252
+Data source: Agency for Healthcare Research and Quality (AHRQ), Medical Expenditure
+Panel Survey Household Component (MEPS-HC), Panel 27 Longitudinal Public Use File
+HC-252.

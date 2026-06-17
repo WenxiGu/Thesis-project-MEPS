@@ -153,7 +153,15 @@ uploaded = st.sidebar.file_uploader("Upload CSV or Parquet", type=["csv", "parqu
 if use_demo:
     demo_path = ROOT / "data" / "df_feat.parquet"
     if not demo_path.exists():
-        st.error(f"Demo file not found: {demo_path}")
+        st.error(
+            f"Demo file not found: {demo_path}. This row-level derived dataset is not tracked "
+            "in git. Download MEPS HC-252 from AHRQ/MEPS, save it as data/h252.xlsx, and run "
+            "the preprocessing/feature-engineering workflow to generate data/df_feat.parquet."
+        )
+        st.markdown(
+            "Official HC-252 download page: "
+            "https://meps.ahrq.gov/mepsweb/data_stats/download_data_files_detail.jsp?cboPufNumber=HC-252"
+        )
         st.stop()
     df = pd.read_parquet(demo_path)
     st.sidebar.success(f"Loaded demo: {demo_path.name} ({len(df):,} rows)")
